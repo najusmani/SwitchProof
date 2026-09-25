@@ -54,6 +54,9 @@ const AGENT = (() => {
   function show(step) {
     $g('gate').hidden = false;
     document.querySelectorAll('.gate-step').forEach(el => { el.hidden = el.dataset.step !== step; });
+    const intro = $g('gateIntro');
+    if (intro) intro.hidden = step !== 'login';
+    $g('gate').classList.toggle('with-intro', step === 'login');
   }
   function msg(id, text, kind) { const el = $g(id); el.textContent = text || ''; el.className = 'gate-msg ' + (kind || ''); }
 

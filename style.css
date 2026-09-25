@@ -735,3 +735,36 @@ body.hosted.agent-ok .hosted-only { display: flex; }
 .gate-manual { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 4px; }
 .gate-manual summary { cursor: pointer; font-size: 13px; color: var(--text-2); margin-bottom: 10px; }
 @media (max-width: 720px) { .user-email { display: none; } .gate-card { padding: 20px 16px; } }
+
+/* ============ Sign-in: product panel ============ */
+.gate-shell { width: min(560px, 100%); display: grid; gap: 28px; align-items: start; }
+.gate.with-intro .gate-shell { width: min(1100px, 100%); grid-template-columns: minmax(0, 1.2fr) minmax(340px, 440px); gap: 48px; }
+.gate.with-intro { padding-top: 6vh; }
+.gate-card { width: 100%; }
+.gate.with-intro .gate-card { position: sticky; top: 6vh; }
+.gate-intro[hidden] { display: none; }
+.gi-eyebrow { font: 600 12px var(--mono); letter-spacing: 0.02em; color: var(--accent); margin-bottom: 12px; }
+.gi-title { font-size: clamp(26px, 3.2vw, 36px); line-height: 1.12; letter-spacing: -0.02em; margin: 0 0 14px; font-weight: 700; }
+.gi-lead { font-size: 15.5px; line-height: 1.55; color: var(--text-2); margin: 0 0 24px; max-width: 58ch; }
+.gi-features { list-style: none; margin: 0 0 24px; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+.gi-features li { display: flex; gap: 14px; align-items: flex-start; }
+.gi-features b { display: block; font-size: 14.5px; margin-bottom: 2px; }
+.gi-features span:not(.gi-ico) { display: block; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+.gi-ico {
+  flex: 0 0 auto; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px;
+  background: var(--accent-soft); color: var(--accent);
+}
+.gi-ico svg { width: 18px; height: 18px; }
+.gi-how { border-top: 1px solid var(--border); padding-top: 16px; }
+.gi-how-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 10px; }
+.gi-how ol { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; counter-reset: how; }
+.gi-how li { counter-increment: how; font-size: 13px; line-height: 1.45; color: var(--text-2); }
+.gi-how li::before {
+  content: counter(how); display: grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; margin-bottom: 6px;
+  background: var(--accent); color: #fff; font: 600 12px var(--mono);
+}
+@media (max-width: 900px) {
+  .gate.with-intro .gate-shell { grid-template-columns: 1fr; gap: 24px; }
+  .gate.with-intro .gate-card { position: static; order: -1; }
+  .gi-how ol { grid-template-columns: 1fr; }
+}
