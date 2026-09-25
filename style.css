@@ -765,6 +765,6 @@ body.hosted.agent-ok .hosted-only { display: flex; }
 }
 @media (max-width: 900px) {
   .gate.with-intro .gate-shell { grid-template-columns: 1fr; gap: 24px; }
-  .gate.with-intro .gate-card { position: static; order: -1; }
+  .gate.with-intro .gate-card { position: static; }
   .gi-how ol { grid-template-columns: 1fr; }
 }
