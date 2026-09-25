@@ -64,7 +64,7 @@ const AGENT = (() => {
       if (res.ok && d.agent) return { ok: true, info: d };
       return { ok: false, why: d.error || 'Agent refused the request' };
     } catch (e) {
-      return { ok: false, why: 'No agent answering at ' + base() + '. Is start.bat running (check its window for errors)? If the browser asked about local network access, allow it and press Connect.' };
+      return { ok: false, why: 'No agent answering at ' + base() + '. Is the SwitchProof agent running (double-click switchproof-agent.jar)? If the browser asked about local network access, allow it and press Connect.' };
     }
   }
 
@@ -137,7 +137,7 @@ const AGENT = (() => {
 
     $g('gcDownload').addEventListener('click', async () => {
       msg('gcDlMsg', 'Preparing download…');
-      const { data, error } = await sb.storage.from(cfg.downloadBucket || 'downloads').createSignedUrl(cfg.downloadPath || 'switchproof-agent.zip', 120, { download: true });
+      const { data, error } = await sb.storage.from(cfg.downloadBucket || 'downloads').createSignedUrl(cfg.downloadPath || 'switchproof-agent.jar', 120, { download: true });
       if (error) { msg('gcDlMsg', error.message, 'bad'); return; }
       msg('gcDlMsg', '');
       location.href = data.signedUrl;
