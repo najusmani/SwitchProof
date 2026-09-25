@@ -1148,3 +1148,11 @@ input.is-sample { border-color: var(--warn) !important; box-shadow: inset 0 0 0 
 .fb-msg.ok { color: var(--ok); }
 .fb-msg.bad { color: var(--bad); }
 @media (max-width: 720px) { .fb-item { grid-template-columns: 40px minmax(0, 1fr); } .fb-status { grid-column: 2; justify-self: start; } }
+
+/* ---- errors card: grouped messages + explanation ---- */
+.error-list { max-height: 280px; }
+.error-list li .err-n { font-weight: 600; margin-right: 4px; }
+.error-list li.err-hint {
+  font: 13px/1.5 var(--font); color: var(--text); background: var(--warn-soft);
+  box-shadow: inset 2px 0 0 var(--warn);
+}

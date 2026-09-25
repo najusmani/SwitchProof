@@ -654,10 +654,7 @@ async function poll() {
   renderCodes(d.responseCodeCounts || {}, d.completed);
   renderResults(d.recentResults || []);
 
-  const errors = d.recentErrors || [];
-  $('errorList').innerHTML = errors.length
-    ? errors.slice().reverse().map(e => `<li>${escapeHtml(e)}</li>`).join('')
-    : '<li class="muted small">None</li>';
+  renderErrors(d);
 
   if (d.status === 'DONE' || d.status === 'CANCELLED') {
     clearInterval(pollTimer);
@@ -689,12 +686,35 @@ function renderCodes(counts, total) {
   }).join('');
 }
 
+// Identical errors are grouped with a count; dropped connections under concurrency get an explanation.
+function renderErrors(d) {
+  const counts = d.errorCounts || {};
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) {
+    const recent = d.recentErrors || [];
+    $('errorList').innerHTML = recent.length
+      ? recent.slice().reverse().map(e => `<li>${escapeHtml(e)}</li>`).join('')
+      : '<li class="muted small">None</li>';
+    return;
+  }
+  const dropped = entries.filter(([m]) => /^Switch .* (closed|reset|dropped|cut) the connection/.test(m)).reduce((n, e) => n + e[1], 0);
+  const hint = dropped && d.concurrency > 1
+    ? `<li class="err-hint">The switch accepted ${dropped === 1 ? 'a connection' : dropped + ' connections'} and dropped ${dropped === 1 ? 'it' : 'them'} without a reply.
+       This usually means it takes fewer simultaneous connections than your concurrency of ${d.concurrency}: try a lower concurrency.
+       Dropped messages are listed in Recent transactions with their RRN, so you can check on the switch whether any were processed.</li>`
+    : '';
+  $('errorList').innerHTML = hint + entries.map(([m, n]) => `<li><b class="err-n">${n}×</b> ${escapeHtml(m)}</li>`).join('');
+}
+
 function renderResults(rows) {
   if (!rows.length) return;
   $('resultsTableBody').innerHTML = rows.slice(-200).reverse().map(r => {
     const code = r.responseCode || (r.mti ? 'MTI:' + r.mti : 'NO_RESPONSE');
-    const cls = r.ok ? 'ok' : codeClass(code);
+    const cls = r.ok ? 'ok' : r.error ? 'warn' : codeClass(code);
     const label = r.responseCode || r.mti || '—';
+    const result = r.error
+      ? `<span class="pill warn code" title="No reply: see Errors">— ${escapeHtml(r.error.toLowerCase())}</span>`
+      : `<span class="pill ${cls} code" title="${escapeHtml(CODE_DESC[code] || '')}">${escapeHtml(label)} ${escapeHtml(r.ok ? 'approved' : (CODE_DESC[code] || 'declined').toLowerCase())}</span>`;
     return `<tr>
       <td class="muted">${r.index + 1}</td>
       <td>${escapeHtml(r.rrn || '')}</td>
@@ -702,7 +722,7 @@ function renderResults(rows) {
       <td>${escapeHtml(r.toAccount || '')}</td>
       <td class="num">${r.amount ? escapeHtml(Number(r.amount).toFixed(2)) : ''}</td>
       <td class="ccy">${escapeHtml(CCY_ALPHA[r.currencyCode] || r.currencyCode || '')}</td>
-      <td><span class="pill ${cls} code" title="${escapeHtml(CODE_DESC[code] || '')}">${escapeHtml(label)} ${escapeHtml(r.ok ? 'approved' : (CODE_DESC[code] || 'declined').toLowerCase())}</span></td>
+      <td>${result}</td>
       <td class="num">${r.latencyMs}</td>
     </tr>`;
   }).join('');
