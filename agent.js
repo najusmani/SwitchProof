@@ -68,10 +68,36 @@ const AGENT = (() => {
     }
   }
 
+  /** True when version `have` is below `need` (numeric, dot-separated; a missing version counts as oldest). */
+  function older(have, need) {
+    const p = (v) => String(v || '0').split('.').map(n => parseInt(n, 10) || 0);
+    const a = p(have), b = p(need);
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) < (b[i] || 0);
+    }
+    return false;
+  }
+  const outdated = (info) => !!cfg.minAgentVersion && info.version !== 'dev' && older(info.version, cfg.minAgentVersion);
+
+  // An outdated agent may not understand this page's requests: block the console until it is updated,
+  // and keep checking so the page continues on its own once the new version is running.
+  let updateTimer = null;
+  function showUpdate(info) {
+    show('update');
+    $g('guNeed').textContent = cfg.minAgentVersion;
+    $g('guHave').textContent = info.version || 'an older version';
+    if (!updateTimer) updateTimer = setInterval(async () => {
+      const r = await probe();
+      if (r.ok && !outdated(r.info)) connect();
+    }, 5000);
+  }
+
   async function connect() {
     msg('gcMsg', 'Checking ' + base() + ' …');
     const r = await probe();
+    if (r.ok && outdated(r.info)) { showUpdate(r.info); return false; }
     if (r.ok) {
+      if (updateTimer) { clearInterval(updateTimer); updateTimer = null; }
       $g('gate').hidden = true;
       document.body.classList.add('agent-ok');
       const who = $g('userEmail');
@@ -135,12 +161,22 @@ const AGENT = (() => {
       msg('glMsg', error ? error.message : 'Password reset email sent.', error ? 'bad' : 'ok');
     });
 
-    $g('gcDownload').addEventListener('click', async () => {
-      msg('gcDlMsg', 'Preparing download…');
+    async function download(msgId) {
+      msg(msgId, 'Preparing download…');
       const { data, error } = await sb.storage.from(cfg.downloadBucket || 'downloads').createSignedUrl(cfg.downloadPath || 'switchproof-agent.jar', 120, { download: true });
-      if (error) { msg('gcDlMsg', error.message, 'bad'); return; }
-      msg('gcDlMsg', '');
+      if (error) { msg(msgId, error.message, 'bad'); return; }
+      msg(msgId, '');
       location.href = data.signedUrl;
+    }
+    $g('gcDownload').addEventListener('click', () => download('gcDlMsg'));
+    $g('guDownload').addEventListener('click', () => download('guDlMsg'));
+    $g('guRetry').addEventListener('click', async () => {
+      msg('guMsg', 'Checking…');
+      const r = await probe();
+      if (!r.ok) { msg('guMsg', 'SwitchProof is not running. Open it from the Start menu.', 'bad'); return; }
+      if (outdated(r.info)) { msg('guMsg', 'Still version ' + (r.info.version || 'unknown') + '. Close SwitchProof, run the new installer, then open it again.', 'bad'); return; }
+      msg('guMsg', '');
+      connect();
     });
     $g('gcForm').addEventListener('submit', async (e) => {
       e.preventDefault();

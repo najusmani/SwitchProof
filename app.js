@@ -52,6 +52,23 @@ const TYPES = [
 ];
 const typeById = (id) => TYPES.find(t => t.id === id) || TYPES[0];
 
+// ---------- Bundles: several transaction types in one run ----------
+const MONEY = (t) => t.cols.includes('amount');   // posts or holds money, so it can be reversed
+const SETTLES = (t) => t.cls === '100';           // 0100 authorizations can be settled (0220)
+const FOLLOW_LABEL = { NONE: 'No follow-up', REVERSE: 'Reverse after approval', SETTLE: 'Settle after approval' };
+const PRESETS = {
+  neutral: [
+    { type: 'WITHDRAWAL', weight: 40, then: 'REVERSE' }, { type: 'PURCHASE', weight: 25, then: 'REVERSE' },
+    { type: 'TRANSFER', weight: 10, then: 'REVERSE' }, { type: 'BALANCE_INQUIRY', weight: 15, then: 'NONE' },
+    { type: 'MINI_STATEMENT', weight: 10, then: 'NONE' }],
+  atm: [
+    { type: 'WITHDRAWAL', weight: 50, then: 'NONE' }, { type: 'BALANCE_INQUIRY', weight: 30, then: 'NONE' },
+    { type: 'MINI_STATEMENT', weight: 15, then: 'NONE' }, { type: 'TRANSFER', weight: 5, then: 'NONE' }],
+  pos: [
+    { type: 'PURCHASE', weight: 60, then: 'SETTLE' }, { type: 'CASH_ADVANCE', weight: 15, then: 'NONE' },
+    { type: 'OFFLINE_PURCHASE', weight: 15, then: 'NONE' }, { type: 'REFUND', weight: 10, then: 'NONE' }],
+};
+
 // ---------- Message profiles (ISO 8583 version per switch) ----------
 let profiles = [];   // from /api/profiles
 const profileOf = (t) => profiles.find(p => p.id === ((t && t.profile) || 'flexcube-87')) || { id: 'flexcube-87', name: 'FLEXCUBE switch (ISO 8583:1987)', version: '1987', verified: true, approved: ['00'] };
@@ -63,6 +80,7 @@ function typeCode(t, target) {
 }
 
 const TEMPLATES = {
+  BUNDLE: 'from_account,to_account,amount,currency\n000100000001,000100000002,10.00,XCD\n000100000002,000100000001,5.00,XCD\n',
   TRANSFER: 'from_account,to_account,amount,currency\n000100000001,000100000002,9.00,XCD\n000100000001,000100000002,12.50,951\n',
   WITHDRAWAL: 'from_account,amount,currency\n000100000001,20.00,XCD\n000100000002,15.00,USD\n',
   PURCHASE: 'from_account,amount,currency\n000100000001,18.00,XCD\n000100000002,25.00,USD\n',
@@ -110,6 +128,19 @@ const codeClass = (c) => OK_CODES.has(c) ? 'ok' : (c === 'NO_RESPONSE' || String
 
 // ---------- State ----------
 let currentType = typeById(store.get('type', 'TRANSFER'));
+let mode = store.get('mode', 'single') === 'bundle' ? 'bundle' : 'single';
+let bundle = (store.get('bundle', null) || PRESETS.neutral)
+  .filter(b => TYPES.some(t => t.id === b.type) && b.type !== 'SIGNOFF')
+  .map(b => ({ type: b.type, weight: Math.max(1, Number(b.weight) || 1), then: b.then || 'NONE' }));
+let runName = '';             // name of the running test, for the finish toast
+
+/** What Run sends: the selected type, or the bundle as a pseudo-type whose data columns are the union of its types'. */
+function activeType() {
+  if (mode !== 'bundle') return currentType;
+  const types = bundle.map(b => typeById(b.type));
+  const cols = ['from', 'to', 'amount', 'currency'].filter(c => types.some(t => t.cols.includes(c)));
+  return { id: 'BUNDLE', name: `Bundle · ${bundle.length} type${bundle.length === 1 ? '' : 's'}`, cls: types.length && types.every(t => t.cls === '800') ? '800' : 'mix', cols, toOptional: true };
+}
 const dataText = {};          // raw rows text per type, so switching types doesn't garble data
 let parsed = [];              // rows parsed for the current type
 let currentJobId = null;
@@ -264,15 +295,29 @@ $('targetForm').addEventListener('submit', async (e) => {
 
 // ---------- Type tiles ----------
 function renderTypes() {
-  $('typeGrid').innerHTML = TYPES.map(t => `
-    <button type="button" class="type-tile" role="radio" data-type="${t.id}" aria-checked="${t.id === currentType.id}">
+  const inBundle = new Set(bundle.map(b => b.type));
+  const multi = mode === 'bundle';
+  $('typeGrid').setAttribute('role', multi ? 'group' : 'radiogroup');
+  $('typeGrid').innerHTML = TYPES.map(t => {
+    const on = multi ? inBundle.has(t.id) : t.id === currentType.id;
+    const blocked = multi && t.id === 'SIGNOFF';
+    return `
+    <button type="button" class="type-tile" role="${multi ? 'checkbox' : 'radio'}" data-type="${t.id}" aria-checked="${on}"${blocked ? ' disabled title="Sign off would sign the switch interface off in the middle of the run"' : ''}>
       <span class="type-ico"><svg viewBox="0 0 24 24">${ICONS[t.icon]}</svg></span>
       <span><span class="type-name">${t.name}</span><span class="type-code">${typeCode(t, activeTarget())}</span>${t.tag && profileOf(activeTarget()).verified ? `<span class="type-tag">${t.tag}</span>` : ''}</span>
-    </button>`).join('');
+    </button>`;
+  }).join('');
 }
 $('typeGrid').addEventListener('click', (e) => {
   const tile = e.target.closest('.type-tile');
-  if (!tile) return;
+  if (!tile || tile.disabled) return;
+  if (mode === 'bundle') {
+    const i = bundle.findIndex(b => b.type === tile.dataset.type);
+    if (i >= 0) bundle.splice(i, 1);
+    else bundle.push({ type: tile.dataset.type, weight: 10, then: 'NONE' });
+    bundleChanged();
+    return;
+  }
   dataText[currentType.id] = $('rowsText').value;
   currentType = typeById(tile.dataset.type);
   store.set('type', currentType.id);
@@ -281,18 +326,105 @@ $('typeGrid').addEventListener('click', (e) => {
 });
 
 function onTypeChanged() {
-  const hasData = currentType.cols.length > 0;
+  const t = activeType();
+  const hasData = t.cols.length > 0;
   $('dataArea').hidden = !hasData;
   $('noDataNote').hidden = hasData;
   $('templateBtn').hidden = !hasData;
-  $('formatCols').innerHTML = currentType.cols.map((c, i) =>
+  $('formatCols').innerHTML = t.cols.map((c, i) =>
     (i ? '<span class="col-sep">,</span>' : '') +
-    `<span class="col-chip ${c === 'from' || c === 'to' ? 'req' : ''}">${COL_LABELS[c]}</span>`).join('');
-  $('rowsText').placeholder = (TEMPLATES[currentType.id] || '').trim();
-  $('rowsText').value = dataText[currentType.id] || '';
+    `<span class="col-chip ${c === 'from' || (c === 'to' && !t.toOptional) ? 'req' : ''}">${COL_LABELS[c]}</span>`).join('');
+  $('rowsText').placeholder = (TEMPLATES[t.id] || '').trim();
+  $('rowsText').value = dataText[t.id] || '';
   $('drop').classList.toggle('loaded', !!$('rowsText').value.trim());
   reparse();
 }
+
+function setMode(m) {
+  const prev = $('rowsText').value;
+  dataText[activeType().id] = prev;
+  mode = m;
+  store.set('mode', m);
+  // Rows with a header row mean the same thing for any type, so they carry over into an empty bundle.
+  if (m === 'bundle' && !dataText.BUNDLE && hasHeader(prev)) dataText.BUNDLE = prev;
+  document.querySelectorAll('.mode-tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
+  document.querySelectorAll('.bundle-only').forEach(el => { el.hidden = m !== 'bundle'; });
+  $('bundleBox').hidden = m !== 'bundle';
+  renderTypes();
+  renderBundle();
+  onTypeChanged();
+}
+document.querySelector('.mode-seg').addEventListener('click', (e) => {
+  const b = e.target.closest('.mode-tab');
+  if (b && b.dataset.mode !== mode) setMode(b.dataset.mode);
+});
+
+function bundleChanged() {
+  store.set('bundle', bundle);
+  renderTypes();
+  renderBundle();
+  onTypeChanged();
+}
+const bundleTotal = () => bundle.reduce((n, b) => n + (Number(b.weight) || 0), 0) || 1;
+const bundleShare = (b) => Math.round((Number(b.weight) || 0) / bundleTotal() * 100) + '%';
+
+function renderBundle() {
+  if (mode !== 'bundle') return;
+  renderBundleBar();
+  $('bundleList').innerHTML = bundle.length ? bundle.map((b, i) => {
+    const t = typeById(b.type);
+    const opts = ['NONE'].concat(MONEY(t) ? ['REVERSE'] : [], SETTLES(t) ? ['SETTLE'] : []);
+    return `<li class="bundle-item" data-i="${i}">
+      <span class="bi-swatch bb-${i % 6}"></span>
+      <span class="bi-name">${escapeHtml(t.name)}${t.tag && profileOf(activeTarget()).verified ? ` <span class="type-tag">${t.tag}</span>` : ''}<span class="type-code">${typeCode(t, activeTarget())}</span></span>
+      <label class="bi-weight"><input type="number" min="1" max="1000" step="1" value="${b.weight}" data-bi-weight aria-label="Weight of ${escapeHtml(t.name)}"><span class="bi-share">${bundleShare(b)}</span></label>
+      <button type="button" class="bi-remove" data-bi-remove aria-label="Remove ${escapeHtml(t.name)}">×</button>
+      ${opts.length > 1 ? `<select data-bi-then aria-label="Follow-up for ${escapeHtml(t.name)}">${opts.map(o => `<option value="${o}"${o === b.then ? ' selected' : ''}>${FOLLOW_LABEL[o]}</option>`).join('')}</select>` : ''}
+    </li>`;
+  }).join('') : '<li class="bundle-empty">Empty bundle: click transaction types above, or pick a preset.</li>';
+  $('bundleEffect').innerHTML = bundleEffect();
+}
+function renderBundleBar() {
+  $('bundleBar').innerHTML = bundle.map((b, i) => `<span class="bb-${i % 6}" style="flex:${Number(b.weight) || 0}" title="${escapeHtml(typeById(b.type).name)} ${bundleShare(b)}"></span>`).join('');
+}
+
+/** What the bundle does to account balances, in one sentence. */
+function bundleEffect() {
+  if (!bundle.length) return '';
+  const money = bundle.filter(b => MONEY(typeById(b.type)));
+  if (!money.length) return 'No money moves: inquiries and network messages only.';
+  const stays = money.filter(b => b.then !== 'REVERSE');
+  if (!stays.length) return '<b>Balance-neutral.</b> Every money-moving message is reversed straight after approval, so balances end where they started. A reversal that is declined leaves its transaction in Open transactions.';
+  return '<b>Moves money:</b> ' + stays.map(b => `${escapeHtml(typeById(b.type).name)}${b.then === 'SETTLE' ? ' (settled)' : ''} ${bundleShare(b)}`).join(', ')
+    + '. Approved ones stay in Open transactions, where you can reverse them in bulk.';
+}
+
+$('bundleList').addEventListener('input', (e) => {
+  const li = e.target.closest('.bundle-item');
+  if (!li || !e.target.matches('[data-bi-weight]')) return;
+  bundle[+li.dataset.i].weight = Math.min(1000, Math.max(1, Math.round(Number(e.target.value) || 1)));
+  store.set('bundle', bundle);
+  renderBundleBar();   // not the list: keep focus in the field being typed in
+  document.querySelectorAll('#bundleList .bundle-item').forEach(el => { el.querySelector('.bi-share').textContent = bundleShare(bundle[+el.dataset.i]); });
+  $('bundleEffect').innerHTML = bundleEffect();
+  refreshSummaries();
+});
+$('bundleList').addEventListener('change', (e) => {
+  const li = e.target.closest('.bundle-item');
+  if (!li) return;
+  if (e.target.matches('[data-bi-then]')) { bundle[+li.dataset.i].then = e.target.value; bundleChanged(); }
+  if (e.target.matches('[data-bi-weight]')) renderBundle();   // normalise what was typed
+});
+$('bundleList').addEventListener('click', (e) => {
+  const li = e.target.closest('.bundle-item');
+  if (li && e.target.closest('[data-bi-remove]')) { bundle.splice(+li.dataset.i, 1); bundleChanged(); }
+});
+$('bundleBox').querySelector('.bundle-presets').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-preset]');
+  if (!b) return;
+  bundle = PRESETS[b.dataset.preset].map(x => Object.assign({}, x));
+  bundleChanged();
+});
 
 // ---------- CSV parsing ----------
 const ALIASES = {
@@ -302,6 +434,14 @@ const ALIASES = {
   currency: ['currency', 'ccy', 'currency_code', 'cur'],
 };
 const norm = (s) => s.toLowerCase().replace(/[\s-]+/g, '_');
+
+/** True when the first non-comment line names its columns (from_account, amount, ...). */
+function hasHeader(text) {
+  const line = (text || '').split(/\r?\n/).map(l => l.trim()).find(l => l && !l.startsWith('#'));
+  if (!line) return false;
+  const delim = ['\t', ';', '|', ','].find(d => line.includes(d)) || ',';
+  return splitLine(line, delim).map(norm).some(h => Object.values(ALIASES).some(a => a.includes(h)));
+}
 
 function splitLine(line, delim) {
   return line.split(delim).map(c => c.trim().replace(/^"(.*)"$/, '$1').trim());
@@ -330,7 +470,7 @@ function parseRows(text, type) {
     if (!r.from) r.errors.push('missing from_account');
     else if (!/^[A-Za-z0-9]{4,}$/.test(r.from)) r.errors.push('bad from_account');
     if (type.cols.includes('to')) {
-      if (!r.to) r.errors.push('missing to_account');
+      if (!r.to) { if (!type.toOptional) r.errors.push('missing to_account'); }
       else if (!/^[A-Za-z0-9]{4,}$/.test(r.to)) r.errors.push('bad to_account');
       else if (r.to === r.from) r.errors.push('to = from');
     }
@@ -350,8 +490,8 @@ let parseTimer = null;
 $('rowsText').addEventListener('input', () => { clearTimeout(parseTimer); parseTimer = setTimeout(reparse, 180); });
 
 function reparse() {
-  dataText[currentType.id] = $('rowsText').value;
-  parsed = parseRows($('rowsText').value, currentType);
+  dataText[activeType().id] = $('rowsText').value;
+  parsed = parseRows($('rowsText').value, activeType());
   renderPreview();
   refreshSummaries();
 }
@@ -370,7 +510,8 @@ function renderPreview() {
 
   // Totals by currency, so it's clear how much money a run moves.
   const totals = {};
-  if (currentType.cols.includes('amount')) {
+  const at = activeType();
+  if (at.id !== 'BUNDLE' && at.cols.includes('amount')) {   // a bundle's rows aren't all money-moving
     const defAmt = Number($('amount').value) || 0;
     const defCcy = resolveCcy($('currencyCode').value) || $('currencyCode').value;
     for (const r of valid) {
@@ -380,7 +521,7 @@ function renderPreview() {
   }
   $('totalsLine').textContent = Object.entries(totals).map(([c, v]) => `${v.toFixed(2)} ${CCY_ALPHA[c] || c}`).join(' · ');
 
-  const cols = currentType.cols;
+  const cols = at.cols;
   $('previewHead').innerHTML = '<tr><th>#</th>' + cols.map(c => `<th class="${c === 'amount' ? 'num' : ''}">${COL_LABELS[c]}</th>`).join('') + '<th>Status</th></tr>';
   const shown = parsed.slice(0, 200);
   $('previewBody').innerHTML = shown.map(r => {
@@ -420,11 +561,11 @@ $('clearBtn').addEventListener('click', () => {
 });
 
 $('templateBtn').addEventListener('click', () => {
-  const csv = TEMPLATES[currentType.id];
+  const csv = TEMPLATES[activeType().id];
   if (!csv) return;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  a.download = currentType.id.toLowerCase() + '_template.csv';
+  a.download = activeType().id.toLowerCase() + '_template.csv';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 });
@@ -533,7 +674,8 @@ document.addEventListener('click', (e) => {
 function refreshSummaries() {
   renderSampleWarnings();
   const n = validRows().length;
-  const usesData = currentType.cols.length > 0;
+  const at = activeType();
+  const usesData = at.cols.length > 0;
   const match = $('matchRows').checked && usesData && n > 0;
   if (match) $('count').value = n;
   $('count').disabled = match;
@@ -549,17 +691,22 @@ function refreshSummaries() {
 
   const rowsPart = usesData ? (n ? ` · cycling ${n} row${n > 1 ? 's' : ''}` : ' · <span style="color:var(--bad)">no data rows</span>') : '';
   const t = activeTarget();
-  $('fireSummary').innerHTML = `<b>${currentType.name}</b> → ${escapeHtml(t ? t.name : '—')}<br>${count} tx over ${dur || 0}s · ${$('concurrency').value || 1} parallel${rowsPart}`;
+  // Follow-ups are extra messages on the same connections: up to one per approved money-moving execution.
+  const followShare = mode === 'bundle' ? bundle.filter(b => b.then !== 'NONE').reduce((x, b) => x + b.weight, 0) / bundleTotal() : 0;
+  const followPart = followShare ? ` · up to ${Math.round(count * followShare)} follow-ups` : '';
+  $('fireSummary').innerHTML = `<b>${escapeHtml(at.name)}</b> → ${escapeHtml(t ? t.name : '—')}<br>${count} tx over ${dur || 0}s · ${$('concurrency').value || 1} parallel${followPart}${rowsPart}`;
 }
 
 // ---------- Run ----------
 $('startBtn').addEventListener('click', async () => {
   clearError();
-  if (currentType.cls !== '800' && !confirmSample(loadViewIssues())) return;
-  const usesData = currentType.cols.length > 0;
+  const at = activeType();
+  if (mode === 'bundle' && !bundle.length) { showError('The bundle is empty: click transaction types to add them, or pick a preset.'); return; }
+  if (at.cls !== '800' && !confirmSample(loadViewIssues())) return;
+  const usesData = at.cols.length > 0;
   const rows = validRows();
   if (usesData && !rows.length) {
-    showError(`Add at least one valid row (${currentType.cols.map(c => COL_LABELS[c]).join(', ')}).`);
+    showError(`Add at least one valid row (${at.cols.map(c => COL_LABELS[c]).join(', ')}).`);
     return;
   }
   const defCcy = resolveCcy($('currencyCode').value);
@@ -567,7 +714,8 @@ $('startBtn').addEventListener('click', async () => {
   const skipped = parsed.length - rows.length;
 
   const payload = {
-    type: currentType.id,
+    type: mode === 'bundle' ? bundle[0].type : currentType.id,
+    mix: mode === 'bundle' ? bundle.map(b => ({ type: b.type, weight: Number(b.weight) || 1, then: b.then })) : undefined,
     count: Number($('count').value) || 1,
     durationSeconds: Number($('duration').value) || 0,
     concurrency: Number($('concurrency').value) || 1,
@@ -589,7 +737,8 @@ $('startBtn').addEventListener('click', async () => {
     currentJobId = data.jobId;
     $('startBtn').disabled = true;
     $('cancelBtn').disabled = false;
-    $('runTitle').textContent = `${currentType.name} · ${payload.count} tx → ${data.target || ''}`;
+    runName = at.name;
+    $('runTitle').textContent = `${at.name} · ${payload.count} tx → ${data.target || ''}`;
     setStatus('running', 'Running');
     resetMonitor();
     if (skipped) toast(`${skipped} invalid row${skipped > 1 ? 's' : ''} skipped`, 'bad');
@@ -612,7 +761,9 @@ function resetMonitor() {
   $('progressFill').style.width = '0%';
   $('progressText').textContent = 'starting…';
   $('codeBars').innerHTML = '<div class="muted small">No responses yet</div>';
-  $('resultsTableBody').innerHTML = '<tr><td colspan="8" class="muted small">Waiting for responses…</td></tr>';
+  $('resultsTableBody').innerHTML = '<tr><td colspan="9" class="muted small">Waiting for responses…</td></tr>';
+  $('kindCard').hidden = true;
+  $('kindBody').innerHTML = '';
   $('errorList').innerHTML = '<li class="muted small">None</li>';
   series = [];
   lastPoll = null;
@@ -655,6 +806,7 @@ async function poll() {
   renderResults(d.recentResults || []);
 
   renderErrors(d);
+  renderKinds(d.byKind);
 
   if (d.status === 'DONE' || d.status === 'CANCELLED') {
     clearInterval(pollTimer);
@@ -662,7 +814,7 @@ async function poll() {
     $('startBtn').disabled = false;
     $('cancelBtn').disabled = true;
     setStatus(d.status === 'DONE' ? 'done' : 'cancelled', d.status === 'DONE' ? 'Done' : 'Cancelled');
-    toast(`${currentType.name}: ${d.approved} approved, ${d.declined} declined, ${d.errors} errors`, d.declined || d.errors ? 'bad' : 'ok');
+    toast(`${runName}: ${d.approved} approved, ${d.declined} declined, ${d.errors} errors`, d.declined || d.errors ? 'bad' : 'ok');
     loadAuthorizations();
   }
 }
@@ -706,6 +858,22 @@ function renderErrors(d) {
   $('errorList').innerHTML = hint + entries.map(([m, n]) => `<li><b class="err-n">${n}×</b> ${escapeHtml(m)}</li>`).join('');
 }
 
+/** Bundle breakdown: one row per type, each followed by its reversals / settlements. */
+function renderKinds(kinds) {
+  $('kindCard').hidden = !kinds;
+  if (!kinds) return;
+  const total = kinds.filter(k => !k.followUp).reduce((n, k) => n + k.weight, 0) || 1;
+  $('kindBody').innerHTML = kinds.map(k => `<tr class="${k.followUp ? 'kind-follow' : ''}">
+    <td>${k.followUp ? '↳ ' + (k.followUp === 'SETTLE' ? 'Settlement' : 'Reversal') : escapeHtml(typeById(k.type).name)}</td>
+    <td class="num">${k.followUp ? '' : Math.round(k.weight / total * 100) + '%'}</td>
+    <td class="num">${k.sent}</td>
+    <td class="num">${k.approved}</td>
+    <td class="num${k.declined ? ' t-bad' : ''}">${k.declined}</td>
+    <td class="num${k.errors ? ' t-warn' : ''}">${k.errors}</td>
+    <td class="num">${k.avgLatencyMs}</td>
+  </tr>`).join('');
+}
+
 function renderResults(rows) {
   if (!rows.length) return;
   $('resultsTableBody').innerHTML = rows.slice(-200).reverse().map(r => {
@@ -715,8 +883,12 @@ function renderResults(rows) {
     const result = r.error
       ? `<span class="pill warn code" title="No reply: see Errors">— ${escapeHtml(r.error.toLowerCase())}</span>`
       : `<span class="pill ${cls} code" title="${escapeHtml(CODE_DESC[code] || '')}">${escapeHtml(label)} ${escapeHtml(r.ok ? 'approved' : (CODE_DESC[code] || 'declined').toLowerCase())}</span>`;
+    const typeCell = r.followUp
+      ? `<span class="muted">↳ ${r.followUp === 'SETTLE' ? 'settlement' : 'reversal'}</span>`
+      : escapeHtml(r.type ? typeById(r.type).name : '');
     return `<tr>
       <td class="muted">${r.index + 1}</td>
+      <td class="type-cell">${typeCell}</td>
       <td>${escapeHtml(r.rrn || '')}</td>
       <td>${escapeHtml(r.fromAccount || '')}</td>
       <td>${escapeHtml(r.toAccount || '')}</td>
@@ -1773,8 +1945,7 @@ $('fbForm').addEventListener('submit', async (e) => {
 AGENT.ready.then(() => { if (AGENT.hosted) fbLoad().catch(() => {}); });
 
 // ---------- Init ----------
-renderTypes();
-onTypeChanged();
+setMode(mode);
 // Hosted: wait until signed in and connected to the user's agent.
 AGENT.ready.then(() => {
   showView(store.get('view', 'load'));

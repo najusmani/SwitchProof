@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260925181525">
+<link rel="stylesheet" href="style.css?v=20260925184022">
 </head>
 <body>
 
@@ -83,8 +83,24 @@
       <div class="card-head">
         <span class="step">01</span>
         <h2>Transaction</h2>
+        <div class="mode-seg" role="tablist" aria-label="What to send">
+          <button type="button" class="mode-tab" role="tab" data-mode="single" aria-selected="true">Single type</button>
+          <button type="button" class="mode-tab" role="tab" data-mode="bundle" aria-selected="false">Bundle</button>
+        </div>
       </div>
+      <p class="hint bundle-only" hidden>A bundle mixes several transaction types in one run, in the shares you set. Click types to add or remove them.</p>
       <div class="type-grid" id="typeGrid" role="radiogroup" aria-label="Transaction type"></div>
+      <div class="bundle" id="bundleBox" hidden>
+        <div class="bundle-presets">
+          <span class="format-label">Presets</span>
+          <button type="button" class="link-btn" data-preset="neutral" title="Every money-moving message is reversed straight after approval">Balance-neutral</button>
+          <button type="button" class="link-btn" data-preset="atm">ATM day</button>
+          <button type="button" class="link-btn" data-preset="pos">POS day</button>
+        </div>
+        <div class="bundle-bar" id="bundleBar" aria-hidden="true"></div>
+        <ul class="bundle-list" id="bundleList"></ul>
+        <p class="bundle-effect" id="bundleEffect"></p>
+      </div>
     </div>
 
     <div class="card">
@@ -230,6 +246,19 @@
       </div>
     </div>
 
+    <div class="card" id="kindCard" hidden>
+      <div class="card-head">
+        <h2>By transaction type</h2>
+        <span class="summary-hint">bundle · follow-ups on their own rows</span>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl kind-tbl">
+          <thead><tr><th>Type</th><th class="num">Share</th><th class="num">Sent</th><th class="num">Approved</th><th class="num">Declined</th><th class="num">Errors</th><th class="num">Avg ms</th></tr></thead>
+          <tbody id="kindBody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-head">
         <h2>Throughput &amp; latency</h2>
@@ -259,8 +288,8 @@
       </div>
       <div class="table-wrap tall">
         <table class="tbl">
-          <thead><tr><th>#</th><th>RRN</th><th>From</th><th>To</th><th class="num">Amount</th><th>Ccy</th><th>Result</th><th class="num">ms</th></tr></thead>
-          <tbody id="resultsTableBody"><tr><td colspan="8" class="muted small">Nothing sent yet</td></tr></tbody>
+          <thead><tr><th>#</th><th>Type</th><th>RRN</th><th>From</th><th>To</th><th class="num">Amount</th><th>Ccy</th><th>Result</th><th class="num">ms</th></tr></thead>
+          <tbody id="resultsTableBody"><tr><td colspan="9" class="muted small">Nothing sent yet</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -532,6 +561,32 @@
         <div class="gate-msg" id="gcMsg" aria-live="polite"></div>
         <div class="gate-links"><button type="button" class="gx-link" data-signout>Sign out</button></div>
       </section>
+
+      <section class="gate-step" data-step="update" hidden>
+        <p class="gx-eyebrow">Update required</p>
+        <h2>Update SwitchProof</h2>
+        <p class="gx-note">This website needs SwitchProof for Windows <b id="guNeed"></b> or newer. The copy on this PC is <b id="guHave"></b>.</p>
+        <ol class="gx-steps">
+          <li>
+            <b>Download the update</b>
+            <span>Same installer as before, about 35&nbsp;MB.</span>
+            <div class="gate-row"><button class="gx-btn" id="guDownload" type="button">Download SwitchProof-Setup.exe</button><span class="gate-msg" id="guDlMsg"></span></div>
+          </li>
+          <li>
+            <b>Close SwitchProof, then run the installer</b>
+            <span>Press <b>Stop agent</b> in the small SwitchProof window first, so the installer can replace it. Your targets, test cases and evidence are kept.</span>
+          </li>
+          <li>
+            <b>Open SwitchProof again</b>
+            <span>From the Start menu. This page continues by itself once the new version is running.</span>
+          </li>
+        </ol>
+        <div class="gate-msg" id="guMsg" aria-live="polite"></div>
+        <div class="gate-links">
+          <button type="button" class="gx-link" id="guRetry">Check again</button>
+          <button type="button" class="gx-link" data-signout>Sign out</button>
+        </div>
+      </section>
     </div>
   </main>
 </div>
@@ -581,8 +636,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20260925181525"></script>
-<script src="agent.js?v=20260925181525"></script>
-<script src="app.js?v=20260925181525"></script>
+<script src="config.js?v=20260925184022"></script>
+<script src="agent.js?v=20260925184022"></script>
+<script src="app.js?v=20260925184022"></script>
 </body>
 </html>
