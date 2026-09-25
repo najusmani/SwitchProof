@@ -119,7 +119,10 @@ const AGENT = (() => {
       e.preventDefault();
       const email = $g('glEmail').value.trim(), password = $g('glPass').value;
       msg('glMsg', signUp ? 'Creating account…' : 'Signing in…');
-      const fn = signUp ? sb.auth.signUp({ email, password }) : sb.auth.signInWithPassword({ email, password });
+      // Confirmation emails return to this exact page (must be listed under Supabase > Auth > Redirect URLs).
+      const fn = signUp
+        ? sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } })
+        : sb.auth.signInWithPassword({ email, password });
       const { data, error } = await fn;
       if (error) { msg('glMsg', error.message, 'bad'); return; }
       if (signUp && !data.session) { msg('glMsg', 'Check your email to confirm the account, then sign in.', 'ok'); return; }
