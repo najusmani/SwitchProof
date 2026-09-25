@@ -642,7 +642,7 @@ function drawChart() {
 
   // Throughput area
   const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + ih);
-  grad.addColorStop(0, accent + '55');
+  grad.addColorStop(0, accent + '2e');
   grad.addColorStop(1, accent + '00');
   ctx.beginPath();
   ctx.moveTo(x(series[0].t), pad.t + ih);

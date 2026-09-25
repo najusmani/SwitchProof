@@ -7,17 +7,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260924231720">
+<link rel="stylesheet" href="style.css?v=20260924232848">
 </head>
 <body>
 
 <header class="topbar">
   <div class="brand">
-    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-      <rect x="1" y="1" width="30" height="30" rx="8" class="bm-bg"/>
-      <path d="M8 20 L13 12 L17 18 L20 14 L24 20" class="bm-line"/>
-      <circle cx="24" cy="20" r="2" class="bm-dot"/>
-    </svg>
+    <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="2"/><path d="M6 15.5l3.5-6 3 4.5 2.2-3.2L18 15.5"/></svg>
     <div>
       <div class="brand-name">SwitchProof</div>
       <div class="brand-sub">ISO 8583 load, function &amp; UAT console</div>
@@ -82,7 +78,7 @@
 
     <div class="card">
       <div class="card-head">
-        <span class="step">1</span>
+        <span class="step">01</span>
         <h2>Transaction</h2>
       </div>
       <div class="type-grid" id="typeGrid" role="radiogroup" aria-label="Transaction type"></div>
@@ -90,7 +86,7 @@
 
     <div class="card">
       <div class="card-head">
-        <span class="step">2</span>
+        <span class="step">02</span>
         <h2>Data set</h2>
         <button class="link-btn" id="templateBtn" type="button">
           <svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14"/></svg>
@@ -139,7 +135,7 @@
 
     <div class="card">
       <div class="card-head">
-        <span class="step">3</span>
+        <span class="step">03</span>
         <h2>Load profile</h2>
         <span class="tps" id="tpsHint">≈ 2 tx/s</span>
       </div>
@@ -166,7 +162,7 @@
 
     <details class="card collapsible" id="defaultsCard">
       <summary class="card-head">
-        <span class="step">4</span>
+        <span class="step">04</span>
         <h2>Message defaults</h2>
         <span class="summary-hint" id="defaultsSummary"></span>
         <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
@@ -506,8 +502,8 @@
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20260924231720"></script>
-<script src="agent.js?v=20260924231720"></script>
-<script src="app.js?v=20260924231720"></script>
+<script src="config.js?v=20260924232848"></script>
+<script src="agent.js?v=20260924232848"></script>
+<script src="app.js?v=20260924232848"></script>
 </body>
 </html>
