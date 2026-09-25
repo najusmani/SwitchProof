@@ -1041,3 +1041,9 @@ body.hosted.agent-ok .hosted-only { display: flex; }
 @media (prefers-reduced-motion: reduce) {
   .gx-trace li, .gx-live i { animation: none; }
 }
+
+/* ISO version tag on the target button; profile picker */
+.target-fmt { font: 500 10px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); border: 1px solid var(--ink-rule); border-radius: 2px; padding: 1px 6px; }
+.target-fmt.warn { color: #d6a54a; border-color: rgba(214, 165, 74, 0.5); }
+.target-form select { width: 100%; background: var(--input); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); }
+@media (max-width: 720px) { .target-fmt { display: none; } }

@@ -21,20 +21,46 @@ const ICONS = {
   power: '<path d="M12 3v8"/><path d="M6.3 7.3a8 8 0 1 0 11.4 0"/>',
   refund: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
   deposit: '<path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 20h16"/>',
+  list: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+  key: '<circle cx="8" cy="14" r="4"/><path d="M11 11l9-9M16 6l3 3"/>',
+  bill: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+  cash: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
+  cashback: '<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M8 13l-2 2 2 2M6 15h7"/>',
+  offline: '<path d="M4 14a8 8 0 0 1 12-7"/><path d="M20 10a8 8 0 0 1-12 7"/><path d="M3 3l18 18"/>',
+  poweroff: '<path d="M12 3v8"/><path d="M6.3 7.3a8 8 0 1 0 11.4 0"/><path d="M4 20l16-16"/>',
 };
 
 const COL_LABELS = { from: 'from_account', to: 'to_account', amount: 'amount', currency: 'currency' };
 
+// cls = message class (MTI without the version digit); proc = default processing code; net = network code per version.
+// tag: status on the FLEXCUBE switch (UAT, 2026-09-25). Untagged types are confirmed there.
 const TYPES = [
-  { id: 'WITHDRAWAL', name: 'ATM Withdrawal', code: '0200 · 010000', icon: 'atm', cols: ['from', 'amount', 'currency'] },
-  { id: 'PURCHASE', name: 'POS Purchase', code: '0100 · 000000', icon: 'card', cols: ['from', 'amount', 'currency'] },
-  { id: 'TRANSFER', name: 'Account Transfer', code: '0200 · 400020', icon: 'transfer', cols: ['from', 'to', 'amount', 'currency'] },
-  { id: 'BALANCE_INQUIRY', name: 'Balance Inquiry', code: '0200 · 310000', icon: 'eye', cols: ['from'] },
-  { id: 'SIGNON', name: 'Sign On', code: '0800 · 301', icon: 'power', cols: [] },
-  { id: 'REFUND', name: 'Refund', code: '0200 · 200000', icon: 'refund', cols: ['from', 'amount', 'currency'], tag: 'Unverified' },
-  { id: 'CASH_DEPOSIT', name: 'Cash Deposit', code: '0200 · 210000', icon: 'deposit', cols: ['from', 'amount', 'currency'], tag: 'Unverified' },
+  { id: 'WITHDRAWAL', name: 'ATM Withdrawal', cls: '200', proc: '010000', icon: 'atm', cols: ['from', 'amount', 'currency'] },
+  { id: 'PURCHASE', name: 'POS Purchase', cls: '100', proc: '000000', icon: 'card', cols: ['from', 'amount', 'currency'] },
+  { id: 'TRANSFER', name: 'Account Transfer', cls: '200', proc: '400020', icon: 'transfer', cols: ['from', 'to', 'amount', 'currency'] },
+  { id: 'BALANCE_INQUIRY', name: 'Balance Inquiry', cls: '200', proc: '310000', icon: 'eye', cols: ['from'] },
+  { id: 'MINI_STATEMENT', name: 'Mini Statement', cls: '200', proc: '380000', icon: 'list', cols: ['from'] },
+  { id: 'PIN_CHANGE', name: 'PIN Change', cls: '200', proc: '920000', icon: 'key', cols: ['from'], tag: 'Not on this switch' },
+  { id: 'CASH_ADVANCE', name: 'POS Cash Advance', cls: '100', proc: '010000', icon: 'cash', cols: ['from', 'amount', 'currency'] },
+  { id: 'PURCHASE_CASHBACK', name: 'Purchase + Cashback', cls: '200', proc: '090000', icon: 'cashback', cols: ['from', 'amount', 'currency'], tag: 'Not on this switch' },
+  { id: 'BILL_PAYMENT', name: 'Bill Payment', cls: '200', proc: '500000', icon: 'bill', cols: ['from', 'to', 'amount', 'currency'], tag: 'Needs biller setup' },
+  { id: 'OFFLINE_PURCHASE', name: 'Offline Purchase', cls: '220', proc: '000000', icon: 'offline', cols: ['from', 'amount', 'currency'] },
+  { id: 'REFUND', name: 'Refund', cls: '200', proc: '200000', icon: 'refund', cols: ['from', 'amount', 'currency'] },
+  { id: 'CASH_DEPOSIT', name: 'Cash Deposit', cls: '200', proc: '210000', icon: 'deposit', cols: ['from', 'amount', 'currency'] },
+  { id: 'SIGNON', name: 'Sign On', cls: '800', net: { '0': '301', '1': '801', '2': '801' }, icon: 'power', cols: [] },
+  { id: 'SIGNOFF', name: 'Sign Off', cls: '800', net: { '0': '002', '1': '802', '2': '802' }, icon: 'poweroff', cols: [], tag: 'Untested' },
 ];
 const typeById = (id) => TYPES.find(t => t.id === id) || TYPES[0];
+
+// ---------- Message profiles (ISO 8583 version per switch) ----------
+let profiles = [];   // from /api/profiles
+const profileOf = (t) => profiles.find(p => p.id === ((t && t.profile) || 'flexcube-87')) || { id: 'flexcube-87', name: 'FLEXCUBE switch (ISO 8583:1987)', version: '1987', verified: true, approved: ['00'] };
+const versionDigit = (v) => (v === '1993' ? '1' : v === '2003' ? '2' : '0');
+function typeCode(t, target) {
+  const d = versionDigit(profileOf(target).version);
+  if (t.cls === '800') return (d === '0' ? '0800' : d + '804') + ' · ' + t.net[d];
+  return d + t.cls + ' · ' + ((profileOf(target).procCodes || {})[t.id] || t.proc);
+}
 
 const TEMPLATES = {
   TRANSFER: 'from_account,to_account,amount,currency\n000100000001,000100000002,9.00,XCD\n000100000001,000100000002,12.50,951\n',
@@ -43,6 +69,12 @@ const TEMPLATES = {
   REFUND: 'from_account,amount,currency\n000100000001,5.00,XCD\n',
   CASH_DEPOSIT: 'from_account,amount,currency\n000100000001,50.00,XCD\n',
   BALANCE_INQUIRY: 'from_account\n000100000001\n000100000002\n',
+  MINI_STATEMENT: 'from_account\n000100000001\n',
+  PIN_CHANGE: 'from_account\n000100000001\n',
+  CASH_ADVANCE: 'from_account,amount,currency\n000100000001,40.00,XCD\n',
+  PURCHASE_CASHBACK: 'from_account,amount,currency\n000100000001,30.00,XCD\n',
+  BILL_PAYMENT: 'from_account,to_account,amount,currency\n000100000001,000100000002,75.00,XCD\n',
+  OFFLINE_PURCHASE: 'from_account,amount,currency\n000100000001,12.00,XCD\n',
 };
 
 // ISO 4217 alpha -> numeric, for the currencies this bank sees most.
@@ -65,8 +97,16 @@ const CODE_DESC = {
   '58': 'Not permitted to terminal', '61': 'Exceeds withdrawal limit', '91': 'Issuer or switch inoperative',
   '92': 'No routing available', '94': 'Duplicate transmission', '96': 'System malfunction',
   'MTI:0810': 'Network response (0810)', 'NO_RESPONSE': 'No response',
+  // ISO 8583:1993 / 2003 action codes
+  '000': 'Approved', '001': 'Honour with identification', '002': 'Approved for partial amount', '100': 'Do not honour',
+  '101': 'Expired card', '106': 'PIN tries exceeded', '110': 'Invalid amount', '111': 'Invalid card number',
+  '116': 'Not sufficient funds', '117': 'Incorrect PIN', '119': 'Not permitted to cardholder', '121': 'Exceeds withdrawal limit',
+  '400': 'Reversal accepted', '800': 'Network message accepted', '902': 'Invalid transaction', '904': 'Format error',
+  '909': 'System malfunction', '911': 'Issuer timed out', '0000': 'Approved',
+  'MTI:1814': 'Network response (1814)', 'MTI:2814': 'Network response (2814)',
 };
-const codeClass = (c) => (c === '00' || c === 'MTI:0810') ? 'ok' : (c === 'NO_RESPONSE' || String(c).startsWith('MTI:')) ? 'warn' : 'bad';
+const OK_CODES = new Set(['00', '000', '001', '002', '400', '800', '0000', 'MTI:0810', 'MTI:1814', 'MTI:2814']);
+const codeClass = (c) => OK_CODES.has(c) ? 'ok' : (c === 'NO_RESPONSE' || String(c).startsWith('MTI:')) ? 'warn' : 'bad';
 
 // ---------- State ----------
 let currentType = typeById(store.get('type', 'TRANSFER'));
@@ -117,6 +157,11 @@ async function targetsApi(path, body) {
 }
 
 async function loadTargets() {
+  try {
+    const pr = await targetsApi('/api/profiles');
+    profiles = pr.profiles || [];
+    $('tfProfile').innerHTML = profiles.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}${p.verified ? ' — verified' : ' — not tested on a switch'}</option>`).join('');
+  } catch (e) { /* older agent without profiles: FLEXCUBE 1987 assumed */ }
   try { targetsState = await targetsApi('/api/targets'); renderTargets(); } catch (e) { /* shown via conn indicator */ }
 }
 
@@ -124,11 +169,14 @@ function renderTargets() {
   const t = activeTarget();
   $('targetName').textContent = t ? t.name : '—';
   $('targetAddr').textContent = t ? `${t.host}:${t.port}` : '';
+  const prof = profileOf(t);
+  $('targetFmt').textContent = 'ISO ' + prof.version + (prof.verified ? '' : ' · untested');
+  $('targetFmt').className = 'target-fmt' + (prof.verified ? '' : ' warn');
   $('targetList').innerHTML = targetsState.targets.map(x => {
     const st = targetTests[x.id];
     return `<li class="t-item ${x.id === targetsState.active ? 'active' : ''}" data-id="${escapeHtml(x.id)}" title="Use this target">
       <span class="t-radio"></span>
-      <span class="t-main"><div class="t-name">${escapeHtml(x.name)}</div><div class="t-addr">${escapeHtml(x.host)}:${x.port}</div></span>
+      <span class="t-main"><div class="t-name">${escapeHtml(x.name)}</div><div class="t-addr">${escapeHtml(x.host)}:${x.port} · ${escapeHtml(profileOf(x).name)}</div></span>
       ${st ? `<span class="t-status ${st.ok ? 'ok' : 'bad'}">${escapeHtml(st.text)}</span>` : ''}
       <span class="t-actions">
         <button type="button" class="t-btn" data-act="test" title="Test TCP connection"><svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 14 0M8.5 12a3.5 3.5 0 0 1 7 0"/><circle cx="12" cy="16" r="1.5"/></svg></button>
@@ -138,6 +186,7 @@ function renderTargets() {
     </li>`;
   }).join('');
   fillTargetDefaults(false);
+  renderTypes();
   refreshSummaries();
   if (typeof renderUatTarget === 'function') renderUatTarget();
 }
@@ -177,6 +226,7 @@ $('targetList').addEventListener('click', async (e) => {
       await testTarget({ id }, (r) => { targetTests[id] = r; renderTargets(); });
     } else if (act === 'edit') {
       $('tfId').value = t.id; $('tfName').value = t.name; $('tfHost').value = t.host; $('tfPort').value = t.port;
+      $('tfProfile').value = t.profile || 'flexcube-87';
       $('tfTitle').textContent = `Edit ${t.name}`; $('tfSave').textContent = 'Save changes'; $('tfCancel').hidden = false;
       $('tfMsg').textContent = ''; $('tfHost').focus();
     } else if (act === 'del') {
@@ -201,7 +251,7 @@ $('tfTest').addEventListener('click', () => {
 $('targetForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const editing = !!$('tfId').value;
-  const body = { id: $('tfId').value || null, name: $('tfName').value.trim() || null, host: $('tfHost').value.trim(), port: $('tfPort').value };
+  const body = { id: $('tfId').value || null, name: $('tfName').value.trim() || null, host: $('tfHost').value.trim(), port: $('tfPort').value, profile: $('tfProfile').value || null };
   try {
     targetsState = await targetsApi('/api/targets', body);
     renderTargets();
@@ -217,7 +267,7 @@ function renderTypes() {
   $('typeGrid').innerHTML = TYPES.map(t => `
     <button type="button" class="type-tile" role="radio" data-type="${t.id}" aria-checked="${t.id === currentType.id}">
       <span class="type-ico"><svg viewBox="0 0 24 24">${ICONS[t.icon]}</svg></span>
-      <span><span class="type-name">${t.name}</span><span class="type-code">${t.code}</span>${t.tag ? `<span class="type-tag">${t.tag}</span>` : ''}</span>
+      <span><span class="type-name">${t.name}</span><span class="type-code">${typeCode(t, activeTarget())}</span>${t.tag && profileOf(activeTarget()).verified ? `<span class="type-tag">${t.tag}</span>` : ''}</span>
     </button>`).join('');
 }
 $('typeGrid').addEventListener('click', (e) => {
@@ -766,8 +816,13 @@ document.querySelector('.views').addEventListener('click', (e) => { const b = e.
 // ---------- UAT: case library ----------
 const ACTION_NAMES = {
   WITHDRAWAL: 'Withdrawal', PURCHASE: 'POS purchase', TRANSFER: 'Transfer', BALANCE_INQUIRY: 'Balance', SIGNON: 'Sign on',
+  SIGNOFF: 'Sign off', MINI_STATEMENT: 'Mini statement', PIN_CHANGE: 'PIN change', CASH_ADVANCE: 'Cash advance',
+  PURCHASE_CASHBACK: 'Purchase + cashback', BILL_PAYMENT: 'Bill payment', OFFLINE_PURCHASE: 'Offline purchase',
   REFUND: 'Refund', CASH_DEPOSIT: 'Cash deposit', COMPLETION: 'Settle', REVERSAL: 'Reverse',
 };
+const NETWORK_ACTIONS = ['SIGNON', 'SIGNOFF'];
+const INQUIRY_ACTIONS = ['BALANCE_INQUIRY', 'MINI_STATEMENT', 'PIN_CHANGE'];
+const TWO_ACCOUNT_ACTIONS = ['TRANSFER', 'BILL_PAYMENT'];
 const FOLLOW_ONS = ['COMPLETION', 'REVERSAL'];
 let uatCases = [];
 const uatSelected = new Set(store.get('uatSelected', []));
@@ -914,6 +969,7 @@ function stepRowHtml(s) {
     <td><input class="s-currency sm" value="${escapeHtml(s.currency ? (CCY_ALPHA[s.currency] || s.currency) : '')}" placeholder="def"></td>
     <td><input class="s-settle" value="${v('settleAmount')}" placeholder="—" inputmode="decimal"></td>
     <td><input class="s-pan" value="${v('pan')}" placeholder="target card"></td>
+    <td><input class="s-proc sm" value="${v('proc')}" placeholder="def" inputmode="numeric" maxlength="6" title="Processing code override (6 digits)"></td>
     <td class="c"><input type="checkbox" class="s-remote" ${s.remote === 'Y' ? 'checked' : ''}></td>
     <td><input class="s-expect sm" value="${escapeHtml(s.expect || '00')}"></td>
     <td><span class="t-actions"><button type="button" class="t-btn" data-mv="-1" title="Move up">↑</button><button type="button" class="t-btn" data-mv="1" title="Move down">↓</button><button type="button" class="t-btn del" data-rm title="Remove step"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span></td>
@@ -924,13 +980,15 @@ function syncStepRows() {
     tr.querySelector('.n').textContent = i + 1;
     const a = tr.querySelector('.s-action').value;
     const fo = FOLLOW_ONS.includes(a);
-    tr.querySelector('.s-from').disabled = fo || a === 'SIGNON';
-    tr.querySelector('.s-to').disabled = a !== 'TRANSFER';
-    tr.querySelector('.s-amount').disabled = fo || a === 'SIGNON' || a === 'BALANCE_INQUIRY';
-    tr.querySelector('.s-currency').disabled = fo || a === 'SIGNON' || a === 'BALANCE_INQUIRY';
-    tr.querySelector('.s-pan').disabled = fo || a === 'SIGNON';
+    const net = NETWORK_ACTIONS.includes(a), inq = INQUIRY_ACTIONS.includes(a);
+    tr.querySelector('.s-from').disabled = fo || net;
+    tr.querySelector('.s-to').disabled = !TWO_ACCOUNT_ACTIONS.includes(a);
+    tr.querySelector('.s-amount').disabled = fo || net || inq;
+    tr.querySelector('.s-currency').disabled = fo || net || inq;
+    tr.querySelector('.s-pan').disabled = fo || net;
     tr.querySelector('.s-settle').disabled = a !== 'COMPLETION';
-    tr.querySelector('.s-remote').disabled = fo || a === 'SIGNON';
+    tr.querySelector('.s-remote').disabled = fo || net;
+    tr.querySelector('.s-proc').disabled = fo || net;
   });
 }
 function addStep(s) {
@@ -986,6 +1044,11 @@ function readSteps() {
     for (const [k, sel] of Object.entries(map)) { const v = get(sel); if (v) s[k] = /amount/i.test(k) ? v.replace(/,/g, '') : v; }
     const rm = tr.querySelector('.s-remote');
     if (rm.checked && !rm.disabled) s.remote = 'Y';
+    const proc = get('.s-proc');
+    if (proc) {
+      if (!/^\d{6}$/.test(proc)) throw new Error(`Step ${i + 1}: processing code must be 6 digits`);
+      s.proc = proc;
+    }
     const ccyRaw = get('.s-currency');
     if (ccyRaw) {
       const ccy = resolveCcy(ccyRaw);
@@ -1013,11 +1076,11 @@ $('caseForm').addEventListener('submit', async (e) => {
 });
 
 // ---------- UAT: spreadsheet import / export ----------
-const CASE_COLS = ['case_id', 'case_name', 'category', 'description', 'precondition', 'expected_result', 'step', 'action', 'from_account', 'to_account', 'amount', 'currency', 'settle_amount', 'card', 'remote', 'expected_code', 'note'];
+const CASE_COLS = ['case_id', 'case_name', 'category', 'description', 'precondition', 'expected_result', 'step', 'action', 'from_account', 'to_account', 'amount', 'currency', 'settle_amount', 'card', 'remote', 'processing_code', 'expected_code', 'note'];
 const csvCell = (v) => { const s = v == null ? '' : String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 function casesToCsv(cases) {
   const lines = [CASE_COLS.join(',')];
-  for (const c of cases) c.steps.forEach((s, i) => lines.push([c.id, c.name, i ? '' : c.category, i ? '' : c.description, i ? '' : c.precondition, i ? '' : c.expectedResult, i + 1, s.action, s.from, s.to, s.amount, s.currency ? (CCY_ALPHA[s.currency] || s.currency) : '', s.settleAmount, s.pan, s.remote, s.expect, s.note].map(csvCell).join(',')));
+  for (const c of cases) c.steps.forEach((s, i) => lines.push([c.id, c.name, i ? '' : c.category, i ? '' : c.description, i ? '' : c.precondition, i ? '' : c.expectedResult, i + 1, s.action, s.from, s.to, s.amount, s.currency ? (CCY_ALPHA[s.currency] || s.currency) : '', s.settleAmount, s.pan, s.remote, s.proc, s.expect, s.note].map(csvCell).join(',')));
   return lines.join('\r\n') + '\r\n';
 }
 function download(name, text, type) {
@@ -1062,7 +1125,7 @@ function csvToCases(text) {
     id: col('case_id', 'id', 'test_id', 'test_case_#', 'test_case'), name: col('case_name', 'name', 'title'), desc: col('description', 'desc', 'acceptance_criteria'),
     action: col('action', 'type', 'transaction'), from: col('from_account', 'from', 'account'), to: col('to_account', 'to'),
     amount: col('amount'), ccy: col('currency', 'ccy'), settle: col('settle_amount', 'settlement_amount', 'settle'),
-    pan: col('card', 'pan', 'card_number'), remote: col('remote', 'remote_on_us'), expect: col('expected_code', 'expected', 'expect', 'expected_response'), note: col('note', 'notes', 'remarks'),
+    pan: col('card', 'pan', 'card_number'), remote: col('remote', 'remote_on_us'), proc: col('processing_code', 'proc', 'proc_code'), expect: col('expected_code', 'expected', 'expect', 'expected_response'), note: col('note', 'notes', 'remarks'),
   };
   if (ix.action == null) throw new Error('Missing an "action" column — download the Template to see the layout');
   if (ix.name == null && ix.id == null) throw new Error('Needs a case_id or case_name column');
@@ -1092,6 +1155,7 @@ function csvToCases(text) {
     if (g('pan')) s.pan = g('pan').replace(/[\s']/g, '');
     if (g('note')) s.note = g('note');
     if (/^(y|yes|true|1)$/i.test(g('remote'))) s.remote = 'Y';
+    if (g('proc')) s.proc = g('proc').replace(/^'/, '').padStart(6, '0');
     if (g('ccy')) { const ccy = resolveCcy(g('ccy')); if (!ccy) throw new Error(`Row ${n + 2}: unknown currency ${g('ccy')}`); s.currency = ccy; }
     if (/^\d$/.test(s.expect)) s.expect = '0' + s.expect; // Excel strips the leading zero of "05"
     c.steps.push(s);
