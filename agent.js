@@ -64,7 +64,7 @@ const AGENT = (() => {
       if (res.ok && d.agent) return { ok: true, info: d };
       return { ok: false, why: d.error || 'Agent refused the request' };
     } catch (e) {
-      return { ok: false, why: 'No agent answering at ' + base() + '. Is the SwitchProof agent running (double-click switchproof-agent.jar)? If the browser asked about local network access, allow it and press Connect.' };
+      return { ok: false, why: 'No agent answering at ' + base() + '. Is SwitchProof running (open it from the Start menu; its small window should be open)? If the browser asked about local network access, allow it and press Connect.' };
     }
   }
 

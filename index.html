@@ -435,12 +435,12 @@
       <p class="gate-lead">The console runs here, but messages to your switch are sent by a small agent on a PC inside your network. Your switch IPs, accounts and test evidence stay on that PC.</p>
       <ol class="gate-steps">
         <li>
-          <b>Download the agent</b> on a PC that can reach your switch (on the bank network or VPN).
-          <div class="gate-row"><button class="btn primary" id="gcDownload" type="button">Download agent</button><span class="gate-msg" id="gcDlMsg"></span></div>
-          <span class="muted small">One file, <span class="mono">switchproof-agent.jar</span>. Needs Java 8 or later (<a href="https://adoptium.net" target="_blank" rel="noopener">free</a>). If your browser warns about the file type, choose <b>Keep</b>.</span>
+          <b>Download SwitchProof</b> on a Windows PC that can reach your switch (bank network or VPN).
+          <div class="gate-row"><button class="btn primary" id="gcDownload" type="button">Download SwitchProof for Windows</button><span class="gate-msg" id="gcDlMsg"></span></div>
+          <span class="muted small"><span class="mono">SwitchProof-Setup.exe</span>, about 35 MB. Java is built in; nothing else to install. No admin rights needed.</span>
         </li>
-        <li><b>Double-click it.</b> A small SwitchProof window opens and this page reconnects, already paired. Keep that window open while you test.
-          <span class="muted small">If double-clicking opens an archive tool instead, run <span class="mono">java -jar switchproof-agent.jar</span>.</span></li>
+        <li><b>Run the installer.</b> If Windows says <i>"Windows protected your PC"</i>, click <b>More info</b> → <b>Run anyway</b>.</li>
+        <li><b>Open SwitchProof</b> from the Start menu or desktop. A small SwitchProof window opens and this page reconnects, already paired. Keep that window open while you test.</li>
         <li><b>Add your switch</b> under <b>Target</b> (top right): its IP and port.</li>
       </ol>
       <details class="gate-manual">
