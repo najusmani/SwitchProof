@@ -64,7 +64,7 @@ const AGENT = (() => {
       if (res.ok && d.agent) return { ok: true, info: d };
       return { ok: false, why: d.error || 'Agent refused the request' };
     } catch (e) {
-      return { ok: false, why: 'No agent answering at ' + base() };
+      return { ok: false, why: 'No agent answering at ' + base() + '. Is start.bat running (check its window for errors)? If the browser asked about local network access, allow it and press Connect.' };
     }
   }
 
