@@ -1547,6 +1547,211 @@ $('runHistory').addEventListener('click', async (e) => {
   }
 });
 
+// ---------- Feedback: feature requests, changes, problems (hosted site, stored in Supabase) ----------
+// Tables and access rules: tools/supabase-feedback.sql. The board is read through the feedback_board view,
+// which never carries who asked (no email, no user id) -- only whether a row is yours; admins also get the email.
+const FB_KIND = { feature: 'Feature request', change: 'Change', problem: 'Problem' };
+const FB_IMPACT = { nice: 'Nice to have', important: 'Important', blocking: 'Blocking testing' };
+const FB_STATUS = { new: 'New', planned: 'Planned', in_progress: 'In progress', done: 'Done', declined: 'Declined' };
+const FB_OPEN = ['new', 'planned', 'in_progress'];
+const FB_COLS = 'id,created_at,updated_at,kind,area,impact,title,details,status,reply,mine,votes,voted,requester';
+const fb = { rows: [], votes: new Map(), myVotes: new Set(), admin: false, tab: 'board', loaded: false, open: new Set() };
+
+function fbClient() {
+  const sb = AGENT.supabase && AGENT.supabase();
+  if (!sb) { toast('Feedback is available when you are signed in on the SwitchProof website.', 'bad'); return null; }
+  return sb;
+}
+function fbSeen() { return store.get('fbSeen', 0); }
+function fbUpdatesForMe() {
+  const seen = fbSeen();
+  return fb.rows.filter(r => r.mine && (r.reply || r.status !== 'new') && Date.parse(r.updated_at) > seen).length;
+}
+function fbBadge() {
+  const n = fbUpdatesForMe();
+  $('fbBadge').hidden = !n;
+  $('fbBadge').textContent = n;
+  $('fbOpen').title = n ? `${n} of your requests ${n === 1 ? 'has' : 'have'} an update` : 'Request a feature or report a problem';
+}
+function fbTableMissing(err) {
+  return err && (/does not exist|schema cache|relation/i.test(err.message || '') || ['42P01', 'PGRST205', 'PGRST202'].includes(err.code));
+}
+
+async function fbLoad() {
+  const sb = AGENT.supabase && AGENT.supabase();
+  if (!sb) return false;
+  $('fbListMsg').textContent = 'Loading…';
+  $('fbListMsg').className = 'fb-msg';
+  const [rows, admin] = await Promise.all([
+    sb.from('feedback_board').select(FB_COLS).order('created_at', { ascending: false }).limit(1000),
+    sb.rpc('is_admin'),
+  ]);
+  if (rows.error) {
+    const err = rows.error;
+    $('fbListMsg').className = 'fb-msg bad';
+    $('fbListMsg').textContent = fbTableMissing(err)
+      ? 'Feedback is not set up on this site yet. The site owner needs to run tools/supabase-feedback.sql in Supabase.'
+      : 'Could not load requests: ' + err.message;
+    return false;
+  }
+  fb.rows = rows.data || [];
+  fb.admin = !admin.error && admin.data === true;
+  fb.votes = new Map(fb.rows.map(r => [r.id, r.votes || 0]));
+  fb.myVotes = new Set(fb.rows.filter(r => r.voted).map(r => r.id));
+  fb.loaded = true;
+  $('fbListMsg').textContent = '';
+  fbBadge();
+  return true;
+}
+
+function fbTabs(tab) {
+  fb.tab = tab;
+  document.querySelectorAll('.fb-tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.fbTab === tab)));
+  document.querySelector('[data-fb-pane="list"]').hidden = tab === 'new';
+  document.querySelector('[data-fb-pane="new"]').hidden = tab !== 'new';
+  if (tab === 'new') setTimeout(() => $('fbTitleInput').focus(), 50);
+  else fbRender();
+}
+
+function fbRender() {
+  const kind = $('fbFilterKind').value, status = $('fbFilterStatus').value, q = $('fbSearch').value.trim().toLowerCase();
+  let rows = fb.rows.filter(r => (fb.tab !== 'mine' || r.mine)
+    && (!kind || r.kind === kind)
+    && (!status || (status === 'open' ? FB_OPEN.includes(r.status) : r.status === status))
+    && (!q || (r.title + ' ' + r.details + ' ' + r.area).toLowerCase().includes(q)));
+  rows = rows.sort($('fbSort').value === 'new'
+    ? (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)
+    : (a, b) => (fb.votes.get(b.id) || 0) - (fb.votes.get(a.id) || 0) || Date.parse(b.created_at) - Date.parse(a.created_at));
+  if (!rows.length) {
+    $('fbList').innerHTML = `<li class="fb-empty">${fb.tab === 'mine' ? "You haven't sent any requests yet." : 'No requests match.'} <button type="button" class="link-plain" data-fb-go="new">Send one</button></li>`;
+    return;
+  }
+  const seen = fbSeen();
+  $('fbList').innerHTML = rows.map(r => {
+    const votes = fb.votes.get(r.id) || 0, mine = r.mine, voted = fb.myVotes.has(r.id), open = fb.open.has(r.id);
+    const fresh = mine && (r.reply || r.status !== 'new') && Date.parse(r.updated_at) > seen;
+    return `<li class="fb-item ${open ? 'open' : ''}" data-id="${r.id}">
+      <button type="button" class="fb-vote ${voted ? 'on' : ''}" data-fb-vote aria-pressed="${voted}" title="${voted ? 'Remove your vote' : 'Vote for this'}">
+        <svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg><span>${votes}</span></button>
+      <div class="fb-body">
+        <button type="button" class="fb-head" data-fb-toggle>
+          <span class="fb-title">${escapeHtml(r.title)}</span>
+          <span class="fb-meta">${escapeHtml(FB_KIND[r.kind] || r.kind)} · ${escapeHtml(r.area)} · ${escapeHtml(FB_IMPACT[r.impact] || r.impact)} · ${new Date(r.created_at).toLocaleDateString()}${mine ? ' · <b>yours</b>' : ''}${fresh ? ' · <b class="fb-new">updated</b>' : ''}</span>
+        </button>
+        <div class="fb-detail">
+          <p class="fb-text">${escapeHtml(r.details)}</p>
+          ${r.reply ? `<div class="fb-reply"><span>Reply from SwitchProof</span><p>${escapeHtml(r.reply)}</p></div>` : ''}
+          ${fb.admin ? `<div class="fb-admin">
+            <span class="fb-requester" data-requester>Requested by ${escapeHtml(r.requester || 'unknown')}</span>
+            <select data-fb-status>${Object.entries(FB_STATUS).map(([k, v]) => `<option value="${k}" ${k === r.status ? 'selected' : ''}>${v}</option>`).join('')}</select>
+            <textarea data-fb-reply rows="3" maxlength="4000" placeholder="Reply to the requester (visible to everyone)">${escapeHtml(r.reply || '')}</textarea>
+            <button type="button" class="btn sm primary-sm" data-fb-save>Save</button><span class="fb-msg" data-fb-savemsg></span>
+          </div>` : ''}
+        </div>
+      </div>
+      <span class="fb-status s-${r.status}">${escapeHtml(FB_STATUS[r.status] || r.status)}</span>
+    </li>`;
+  }).join('');
+}
+
+async function fbOpenDialog() {
+  if (!fbClient()) return;
+  $('fbDlg').showModal();
+  fbTabs(fb.tab === 'new' ? 'new' : fb.tab);
+  if (await fbLoad()) fbRender();
+}
+
+// Card numbers (Luhn-valid 13-19 digits), long account-like numbers and private IP addresses.
+function fbSensitive(text) {
+  const hits = [];
+  for (const m of text.matchAll(/\b\d(?:[ -]?\d){12,18}\b/g)) {
+    const d = m[0].replace(/\D/g, '');
+    let sum = 0;
+    for (let i = 0; i < d.length; i++) { let n = +d[d.length - 1 - i]; if (i % 2) { n *= 2; if (n > 9) n -= 9; } sum += n; }
+    if (sum % 10 === 0) { hits.push('a card number'); break; }
+  }
+  if (/\b\d{10,}\b/.test(text) && !hits.length) hits.push('a long number (account or card?)');
+  if (/\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})\b/.test(text)) hits.push('an internal IP address');
+  return hits;
+}
+
+$('fbOpen').addEventListener('click', fbOpenDialog);
+$('fbClose').addEventListener('click', () => $('fbDlg').close());
+$('fbDlg').addEventListener('close', () => { if (fb.loaded) { store.set('fbSeen', Date.now()); fbBadge(); } });
+document.querySelector('.fb-tabs').addEventListener('click', (e) => { const b = e.target.closest('.fb-tab'); if (b) fbTabs(b.dataset.fbTab); });
+['fbFilterKind', 'fbFilterStatus', 'fbSort'].forEach(id => $(id).addEventListener('change', fbRender));
+$('fbSearch').addEventListener('input', fbRender);
+
+$('fbList').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-fb-go]')) { fbTabs('new'); return; }
+  const li = e.target.closest('.fb-item');
+  if (!li) return;
+  const id = Number(li.dataset.id);
+  const sb = fbClient();
+  if (!sb) return;
+
+  if (e.target.closest('[data-fb-toggle]')) {
+    li.classList.toggle('open');
+    li.classList.contains('open') ? fb.open.add(id) : fb.open.delete(id);
+    return;
+  }
+
+  if (e.target.closest('[data-fb-vote]')) {
+    const had = fb.myVotes.has(id);
+    const res = had
+      ? await sb.from('feedback_votes').delete().eq('feedback_id', id)   // row security limits this to your own vote
+      : await sb.from('feedback_votes').insert({ feedback_id: id });
+    if (res.error) { toast('Vote not saved: ' + res.error.message, 'bad'); return; }
+    had ? fb.myVotes.delete(id) : fb.myVotes.add(id);
+    fb.votes.set(id, Math.max(0, (fb.votes.get(id) || 0) + (had ? -1 : 1)));
+    fbRender();
+    return;
+  }
+
+  if (e.target.closest('[data-fb-save]')) {
+    const msg = li.querySelector('[data-fb-savemsg]');
+    const status = li.querySelector('[data-fb-status]').value;
+    const reply = li.querySelector('[data-fb-reply]').value.trim() || null;
+    msg.className = 'fb-msg'; msg.textContent = 'saving…';
+    const { error } = await sb.from('feedback').update({ status, reply, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) { msg.className = 'fb-msg bad'; msg.textContent = error.message; return; }
+    const row = fb.rows.find(r => r.id === id);
+    Object.assign(row, { status, reply, updated_at: new Date().toISOString() });
+    msg.className = 'fb-msg ok'; msg.textContent = 'saved';
+    setTimeout(fbRender, 700);
+  }
+});
+
+$('fbForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const sb = fbClient();
+  if (!sb) return;
+  const title = $('fbTitleInput').value.trim(), details = $('fbDetails').value.trim();
+  const msg = $('fbFormMsg');
+  msg.className = 'fb-msg bad';
+  if (title.length < 5) { msg.textContent = 'Give it a title of at least 5 characters.'; return; }
+  if (details.length < 10) { msg.textContent = 'Add a few more details (at least 10 characters).'; return; }
+  const hits = fbSensitive(title + '\n' + details);
+  if (hits.length && !confirm(`Your request seems to contain ${hits.join(' and ')}.\n\nOther users can read requests on the board. Remove bank data before sending, or press OK to send it anyway.`)) return;
+  $('fbSubmit').disabled = true;
+  msg.className = 'fb-msg'; msg.textContent = 'sending…';
+  const { error } = await sb.from('feedback').insert({ kind: $('fbKind').value, area: $('fbArea').value, impact: $('fbImpact').value, title, details });
+  $('fbSubmit').disabled = false;
+  if (error) {
+    msg.className = 'fb-msg bad';
+    msg.textContent = fbTableMissing(error) ? 'Feedback is not set up on this site yet.' : error.message;
+    return;
+  }
+  $('fbForm').reset();
+  msg.textContent = '';
+  toast('Thanks — your request is on the board', 'ok');
+  await fbLoad();
+  fbTabs('mine');
+});
+
+// Show "updated" on the Feedback button after sign-in, without opening the dialog.
+AGENT.ready.then(() => { if (AGENT.hosted) fbLoad().catch(() => {}); });
+
 // ---------- Init ----------
 renderTypes();
 onTypeChanged();

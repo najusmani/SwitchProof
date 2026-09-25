@@ -162,7 +162,10 @@ const AGENT = (() => {
     resolveReady(null);
   }
 
-  return { hosted, url, link, apiFetch, ready, base };
+  /** The signed-in Supabase client (hosted mode only; null before sign-in or when running locally). */
+  const supabase = () => sb;
+
+  return { hosted, url, link, apiFetch, ready, base, supabase };
 })();
 
 const apiFetch = AGENT.apiFetch;

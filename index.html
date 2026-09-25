@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260925111512">
+<link rel="stylesheet" href="style.css?v=20260925122339">
 </head>
 <body>
 
@@ -62,6 +62,7 @@
 
   <div class="user-menu hosted-only">
     <span class="user-email" id="userEmail"></span>
+    <button type="button" class="btn sm ghost-plain fb-open" id="fbOpen" title="Request a feature or report a problem">Feedback<span class="fb-badge" id="fbBadge" hidden></span></button>
     <button type="button" class="btn sm ghost-plain" id="agentDisconnect" title="Forget the pairing with this agent">Disconnect agent</button>
     <button type="button" class="btn sm ghost-plain" data-signout>Sign out</button>
   </div>
@@ -535,10 +536,53 @@
   </main>
 </div>
 
+<dialog class="fb-dlg" id="fbDlg" aria-labelledby="fbTitle">
+  <div class="dlg-head">
+    <div>
+      <p class="fb-eyebrow">Feedback</p>
+      <h2 id="fbTitle">Requests &amp; ideas</h2>
+    </div>
+    <button type="button" class="t-btn" id="fbClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <nav class="fb-tabs" role="tablist">
+    <button type="button" role="tab" class="fb-tab" data-fb-tab="board" aria-selected="true">Board</button>
+    <button type="button" role="tab" class="fb-tab" data-fb-tab="mine" aria-selected="false">My requests</button>
+    <button type="button" role="tab" class="fb-tab" data-fb-tab="new" aria-selected="false">New request</button>
+  </nav>
+
+  <section class="fb-pane" data-fb-pane="list">
+    <div class="fb-toolbar">
+      <select id="fbFilterKind" aria-label="Type"><option value="">All types</option><option value="feature">Feature requests</option><option value="change">Changes</option><option value="problem">Problems</option></select>
+      <select id="fbFilterStatus" aria-label="Status"><option value="open">Open</option><option value="">Any status</option><option value="new">New</option><option value="planned">Planned</option><option value="in_progress">In progress</option><option value="done">Done</option><option value="declined">Declined</option></select>
+      <select id="fbSort" aria-label="Sort"><option value="votes">Most votes</option><option value="new">Newest</option></select>
+      <input type="search" id="fbSearch" placeholder="Search requests" aria-label="Search">
+    </div>
+    <div class="fb-msg" id="fbListMsg"></div>
+    <ul class="fb-list" id="fbList"></ul>
+  </section>
+
+  <section class="fb-pane" data-fb-pane="new" hidden>
+    <p class="fb-lead">Tell us what would make SwitchProof more useful. Check the board first: if someone already asked, vote for it instead.</p>
+    <form id="fbForm" autocomplete="off">
+      <div class="field-row three">
+        <label class="field"><span>Type</span>
+          <select id="fbKind"><option value="feature">New feature</option><option value="change">Change to an existing feature</option><option value="problem">Something isn't working</option></select></label>
+        <label class="field"><span>Area</span>
+          <select id="fbArea"><option>Load test</option><option>UAT test cases</option><option>UAT reports &amp; evidence</option><option>Open transactions</option><option>Switch targets &amp; message formats</option><option>Transaction types</option><option>Installer &amp; agent</option><option>Sign-in &amp; website</option><option>Other</option></select></label>
+        <label class="field"><span>How important?</span>
+          <select id="fbImpact"><option value="nice">Nice to have</option><option value="important">Important</option><option value="blocking">Blocking our testing</option></select></label>
+      </div>
+      <label class="field"><span>Title <em>one line, 5–120 characters</em></span><input type="text" id="fbTitleInput" maxlength="120" required></label>
+      <label class="field"><span>Details <em>what you need and why; for problems, the steps and what you saw</em></span><textarea id="fbDetails" rows="7" maxlength="4000" required></textarea></label>
+      <p class="fb-privacy">Don't include card numbers, account numbers, switch IP addresses or other bank data. Other users can read and vote on requests, but never see who sent them — only the SwitchProof team sees your email.</p>
+      <div class="fb-actions"><span class="fb-msg" id="fbFormMsg"></span><button type="submit" class="btn primary" id="fbSubmit">Send request</button></div>
+    </form>
+  </section>
+</dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20260925111512"></script>
-<script src="agent.js?v=20260925111512"></script>
-<script src="app.js?v=20260925111512"></script>
+<script src="config.js?v=20260925122339"></script>
+<script src="agent.js?v=20260925122339"></script>
+<script src="app.js?v=20260925122339"></script>
 </body>
 </html>
