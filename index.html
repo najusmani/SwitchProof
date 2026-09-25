@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260925102046">
+<link rel="stylesheet" href="style.css?v=20260925111512">
 </head>
 <body>
 
@@ -76,6 +76,7 @@
 
   <!-- ================= COMPOSE ================= -->
   <section class="compose">
+    <div class="sample-banner" id="sampleBanner" role="alert" hidden></div>
 
     <div class="card">
       <div class="card-head">
@@ -187,6 +188,7 @@
         <span>Rotate PANs <em>optional · one per line, overrides the card above</em></span>
         <textarea id="pansText" rows="2" spellcheck="false" placeholder="4000000000000002"></textarea>
       </label>
+      <div class="sample-note" id="sampleWarn" hidden></div>
     </details>
 
     <div class="fire-bar">
@@ -268,16 +270,47 @@
   <div class="card-head">
     <h2>Open transactions</h2>
     <span id="authCount" class="pill neutral">0 open</span>
-    <p class="hint inline">Approved Purchases, Withdrawals and Transfers land here. <b>Settle</b> sends a 0220 completion for a Purchase authorization; <b>Reverse</b> sends a 0400 that reuses the original RRN.</p>
+    <p class="hint inline">Approved financial transactions land here. <b>Settle</b> sends a completion (0220) for an authorization; <b>Reverse</b> sends a reversal (0400) with the original RRN. Select rows to settle or reverse many at once.</p>
     <button id="refreshAuthBtn" class="link-btn" type="button">
       <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 11V5m0 6h-6"/></svg>
       Refresh
     </button>
   </div>
+
+  <div class="ot-toolbar">
+    <select id="otType" aria-label="Filter by type"><option value="">All types</option></select>
+    <input type="search" id="otSearch" placeholder="Filter by RRN, account or auth code" aria-label="Filter">
+    <select id="otSelect" aria-label="Select rows">
+      <option value="">Select…</option>
+      <option value="all">All shown</option>
+      <option value="auth">Authorizations (can settle)</option>
+      <option value="old">Older than 15 minutes</option>
+      <option value="none">None</option>
+    </select>
+    <button type="button" class="btn sm ghost-plain" id="otExport" title="Download the shown rows (or the selection) as CSV">Export CSV</button>
+  </div>
+
+  <div class="ot-bulk" id="otBulk" hidden>
+    <span class="ot-bulk-count" id="otBulkCount"></span>
+    <span class="ot-bulk-total mono" id="otBulkTotal"></span>
+    <div class="ot-bulk-actions">
+      <button type="button" class="btn sm ok" id="otSettle">Settle selected</button>
+      <button type="button" class="btn sm bad" id="otReverse">Reverse selected</button>
+      <button type="button" class="btn sm ghost-plain" id="otForget" title="Drop from this list without sending anything to the switch">Remove from list</button>
+      <button type="button" class="link-btn" id="otClear">Clear selection</button>
+    </div>
+  </div>
+
+  <div class="ot-progress" id="otProgress" hidden>
+    <div class="ot-progress-line"><span id="otProgressText"></span><button type="button" class="btn sm ghost-plain" id="otStop">Stop</button></div>
+    <div class="progress"><div class="progress-fill" id="otProgressFill"></div></div>
+  </div>
+  <div class="ot-summary" id="otSummary" hidden></div>
+
   <div class="table-wrap">
     <table class="tbl">
-      <thead><tr><th>Type</th><th>RRN</th><th>From</th><th>To</th><th class="num">Amount</th><th>Ccy</th><th>Auth</th><th>Age</th><th>Settle amount</th><th></th></tr></thead>
-      <tbody id="authTableBody"><tr><td colspan="10" class="muted small">No open transactions</td></tr></tbody>
+      <thead><tr><th class="c"><input type="checkbox" id="otAll" aria-label="Select all shown"></th><th>Type</th><th>RRN</th><th>From</th><th>To</th><th class="num">Amount</th><th>Ccy</th><th>Auth</th><th>Age</th><th>Settle amount</th><th></th></tr></thead>
+      <tbody id="authTableBody"><tr><td colspan="11" class="muted small">No open transactions</td></tr></tbody>
     </table>
   </div>
 </section>
@@ -309,6 +342,7 @@
   <section class="uat-side">
     <div class="card">
       <div class="card-head"><h2>Execute</h2><span class="summary-hint" id="uatTargetLine">—</span></div>
+      <div class="sample-banner" id="uatSampleWarn" role="alert" hidden></div>
       <div class="field-row two">
         <label class="field"><span>Tester</span><input type="text" id="uatTester" placeholder="Name on the report" maxlength="60"></label>
         <label class="field"><span>Defaults for this target</span><div class="defaults-line mono" id="uatDefaults">—</div></label>
@@ -503,8 +537,8 @@
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20260925102046"></script>
-<script src="agent.js?v=20260925102046"></script>
-<script src="app.js?v=20260925102046"></script>
+<script src="config.js?v=20260925111512"></script>
+<script src="agent.js?v=20260925111512"></script>
+<script src="app.js?v=20260925111512"></script>
 </body>
 </html>

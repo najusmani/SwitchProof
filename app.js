@@ -475,7 +475,63 @@ TARGET_FIELDS.forEach(f => $(f).addEventListener('input', () => {
 ['count', 'duration', 'concurrency'].forEach(f => $(f).addEventListener('input', refreshSummaries));
 $('matchRows').addEventListener('change', refreshSummaries);
 
+// ---------- Placeholder card / acquirer ----------
+// The downloadable app ships placeholder values instead of any bank's real test card and acquirer.
+// A switch can't recognise them as its own, so it declines (usually 05, off-us).
+const SAMPLE_PANS = new Set(['4000000000000002']);
+const SAMPLE_ACQUIRERS = new Set(['100001', '100002', '100003']);
+const spacedPan = (p) => String(p).replace(/(\d{4})(?=\d)/g, '$1 ');
+
+/** Problems with the card / acquirer that will actually be sent. */
+function sampleIssues(pan, acquirer, rotation) {
+  const issues = [];
+  const cards = rotation && rotation.length ? rotation : [pan];
+  const sampleCards = cards.filter(c => SAMPLE_PANS.has(String(c).trim()));
+  if (sampleCards.length) issues.push({ what: 'card', text: `the placeholder card number ${spacedPan(sampleCards[0])}` });
+  if (SAMPLE_ACQUIRERS.has(String(acquirer).trim())) issues.push({ what: 'acquirer', text: `the placeholder acquirer ${String(acquirer).trim()}` });
+  return issues;
+}
+function loadViewIssues() {
+  return sampleIssues($('pan').value, $('acquiringInstitution').value, $('pansText').value.split(/[\r\n,]+/).map(x => x.trim()).filter(Boolean));
+}
+function uatViewIssues() {
+  const t = activeTarget();
+  const d = Object.assign({}, BUILTIN_DEFAULTS, (t && t.defaults) || {});
+  return sampleIssues(d.pan, d.acquiringInstitution, null);
+}
+function sampleMessage(issues, target) {
+  const what = issues.map(i => i.text).join(' and ');
+  return `<div><b>${escapeHtml(target ? target.name : 'This switch')} is set to ${escapeHtml(what)}.</b> `
+    + `These are samples that ship with SwitchProof, so your switch will decline the transactions (usually 05, off-us). `
+    + `Enter your own test card and acquiring institution under Message defaults — they're saved for this switch.</div>`
+    + `<button type="button" class="btn sm primary-sm" data-set-card>Set card</button>`;
+}
+function renderSampleWarnings() {
+  const t = activeTarget();
+  const li = loadViewIssues(), ui = uatViewIssues();
+  $('sampleBanner').hidden = !li.length;
+  $('sampleBanner').innerHTML = li.length ? sampleMessage(li, t) : '';
+  $('sampleWarn').hidden = !li.length;
+  $('sampleWarn').textContent = li.length ? `Sample value — replace ${li.map(i => i.what === 'card' ? 'the card number' : 'the acquiring institution').join(' and ')} with your own.` : '';
+  ['pan', 'acquiringInstitution'].forEach(id => $(id).classList.toggle('is-sample', li.some(i => (i.what === 'card') === (id === 'pan'))));
+  $('uatSampleWarn').hidden = !ui.length;
+  $('uatSampleWarn').innerHTML = ui.length ? sampleMessage(ui, t) : '';
+}
+/** Asks before sending with placeholder values; true = go ahead. */
+function confirmSample(issues) {
+  if (!issues.length) return true;
+  return confirm(`This switch is set to ${issues.map(i => i.text).join(' and ')}.\n\nThat's a sample value, so the switch will decline (usually 05). Set your own under Message defaults.\n\nSend anyway?`);
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-set-card]')) return;
+  showView('load');
+  $('defaultsCard').open = true;
+  $('defaultsCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => { const el = SAMPLE_ACQUIRERS.has($('acquiringInstitution').value.trim()) && !SAMPLE_PANS.has($('pan').value.trim()) ? $('acquiringInstitution') : $('pan'); el.focus(); el.select(); }, 350);
+});
+
 function refreshSummaries() {
+  renderSampleWarnings();
   const n = validRows().length;
   const usesData = currentType.cols.length > 0;
   const match = $('matchRows').checked && usesData && n > 0;
@@ -499,6 +555,7 @@ function refreshSummaries() {
 // ---------- Run ----------
 $('startBtn').addEventListener('click', async () => {
   clearError();
+  if (currentType.cls !== '800' && !confirmSample(loadViewIssues())) return;
   const usesData = currentType.cols.length > 0;
   const rows = validRows();
   if (usesData && !rows.length) {
@@ -712,10 +769,31 @@ function drawChart() {
 window.addEventListener('resize', drawChart);
 
 // ---------- Open transactions ----------
-const settleEdits = {};   // rrn -> amount typed by the user; survives the periodic refresh
+const settleEdits = {};        // rrn -> amount typed by the user; survives the periodic refresh
+const otSelected = new Set();  // selected RRNs
+const otStatus = {};           // rrn -> {cls, text}: last result shown on a row (kept across refreshes)
+let authRows = [];             // last list from the agent
+let otRun = null;              // bulk run in progress: {stop}
+
 document.addEventListener('input', (e) => {
   if (e.target.classList.contains('settle')) settleEdits[e.target.closest('tr').dataset.rrn] = e.target.value;
 });
+
+const otAge = (r) => Math.max(0, Math.round((Date.now() - r.capturedAtMs) / 1000));
+const otAgeLabel = (s) => (s < 60 ? s + 's' : s < 3600 ? Math.round(s / 60) + 'm' : Math.round(s / 3600) + 'h');
+const otSettleAmount = (r) => (settleEdits[r.rrn] != null && settleEdits[r.rrn] !== '' ? settleEdits[r.rrn] : r.amount);
+
+function otFiltered() {
+  const type = $('otType').value, q = $('otSearch').value.trim().toLowerCase();
+  return authRows.filter(r => (!type || r.txnLabel === type)
+    && (!q || [r.rrn, r.account, r.toAccount, r.authCode].some(v => v && String(v).toLowerCase().includes(q))));
+}
+
+function otTotals(rows) {
+  const t = {};
+  for (const r of rows) { const c = CCY_ALPHA[r.currencyCode] || r.currencyCode; t[c] = (t[c] || 0) + Number(r.amount || 0); }
+  return Object.entries(t).map(([c, v]) => `${v.toFixed(2)} ${c}`).join(' · ');
+}
 
 async function loadAuthorizations() {
   let data;
@@ -724,73 +802,102 @@ async function loadAuthorizations() {
     data = await res.json();
     setConn(true);
   } catch (e) { setConn(false); return; }
-  const rows = data.authorizations || [];
-  $('authCount').textContent = rows.length + ' open';
-  if (!rows.length) {
-    $('authTableBody').innerHTML = '<tr><td colspan="10" class="muted small">No open transactions — approved Purchases, Withdrawals and Transfers appear here.</td></tr>';
-    return;
-  }
-  // Keep in-progress rows (buttons disabled / result shown) untouched between refreshes.
-  const busy = new Set([...document.querySelectorAll('#authTableBody tr[data-busy]')].map(tr => tr.dataset.rrn));
-  if (busy.size) return;
+  if (otRun) return;   // a bulk run updates its rows itself
+  authRows = data.authorizations || [];
+  for (const rrn of [...otSelected]) if (!authRows.some(r => r.rrn === rrn)) otSelected.delete(rrn);
+  $('authCount').textContent = authRows.length + ' open';
+  // type filter options follow what is in the list
+  const types = [...new Set(authRows.map(r => r.txnLabel))];
+  const cur = $('otType').value;
+  $('otType').innerHTML = '<option value="">All types</option>' + types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(typeById(t).name)}</option>`).join('');
+  $('otType').value = types.includes(cur) ? cur : '';
   // Don't rebuild the table under the user's cursor while they're typing a settle amount.
-  if (document.activeElement && document.activeElement.classList.contains('settle')) return;
-  $('authTableBody').innerHTML = rows.map(r => {
-    const ageSec = Math.max(0, Math.round((Date.now() - r.capturedAtMs) / 1000));
-    const age = ageSec < 60 ? ageSec + 's' : ageSec < 3600 ? Math.round(ageSec / 60) + 'm' : Math.round(ageSec / 3600) + 'h';
-    const settle = r.canComplete
-      ? `<input type="number" step="0.01" class="settle" value="${escapeHtml(settleEdits[r.rrn] != null ? settleEdits[r.rrn] : r.amount)}">`
-      : '<span class="muted small">—</span>';
-    return `<tr data-rrn="${escapeHtml(r.rrn)}">
-      <td><span class="pill neutral">${escapeHtml(typeById(r.txnLabel).name)}</span>${r.targetName ? `<div class="sub">${escapeHtml(r.targetName)}</div>` : ''}</td>
-      <td>${escapeHtml(r.rrn)}</td>
-      <td>${escapeHtml(r.account)}</td>
-      <td>${escapeHtml(r.toAccount || '')}</td>
-      <td class="num">${escapeHtml(Number(r.amount).toFixed(2))}</td>
-      <td class="ccy">${escapeHtml(CCY_ALPHA[r.currencyCode] || r.currencyCode)}</td>
-      <td>${r.authCode ? escapeHtml(r.authCode) : '<span class="muted">—</span>'}</td>
-      <td class="muted">${age}</td>
-      <td>${settle}</td>
-      <td><div class="actions">
-        ${r.canComplete ? '<button class="btn sm ok settle-btn">Settle</button>' : ''}
-        <button class="btn sm bad reverse-btn">Reverse</button>
-        <span class="result-msg"></span>
-      </div></td>
-    </tr>`;
-  }).join('');
+  if (document.activeElement && document.activeElement.classList.contains('settle')) { otBulkBar(); return; }
+  renderAuthTable();
 }
 
-function setConn(online) {
-  $('conn').className = 'conn ' + (online ? 'online' : 'offline');
-  $('connText').textContent = online ? (AGENT.hosted ? 'Agent connected' : 'Console online') : (AGENT.hosted ? 'Agent offline' : 'Console offline');
-  if (online && !targetsState.targets.length) loadTargets();
+function renderAuthTable() {
+  const rows = otFiltered();
+  if (!authRows.length) {
+    $('authTableBody').innerHTML = '<tr><td colspan="11" class="muted small">No open transactions — approved purchases, withdrawals, transfers and other financial transactions appear here.</td></tr>';
+  } else if (!rows.length) {
+    $('authTableBody').innerHTML = '<tr><td colspan="11" class="muted small">No transaction matches the filter.</td></tr>';
+  } else {
+    $('authTableBody').innerHTML = rows.map(r => {
+      const st = otStatus[r.rrn];
+      const settle = r.canComplete
+        ? `<input type="number" step="0.01" class="settle" value="${escapeHtml(otSettleAmount(r))}" aria-label="Settle amount">`
+        : '<span class="muted small">—</span>';
+      return `<tr data-rrn="${escapeHtml(r.rrn)}" class="${otSelected.has(r.rrn) ? 'selected' : ''}">
+        <td class="c"><input type="checkbox" class="ot-chk" ${otSelected.has(r.rrn) ? 'checked' : ''} aria-label="Select ${escapeHtml(r.rrn)}"></td>
+        <td><span class="pill neutral">${escapeHtml(typeById(r.txnLabel).name)}</span>${r.targetName ? `<div class="sub">${escapeHtml(r.targetName)}</div>` : ''}</td>
+        <td>${escapeHtml(r.rrn)}</td>
+        <td>${escapeHtml(r.account)}</td>
+        <td>${escapeHtml(r.toAccount || '')}</td>
+        <td class="num">${escapeHtml(Number(r.amount).toFixed(2))}</td>
+        <td class="ccy">${escapeHtml(CCY_ALPHA[r.currencyCode] || r.currencyCode)}</td>
+        <td>${r.authCode ? escapeHtml(r.authCode) : '<span class="muted">—</span>'}</td>
+        <td class="muted">${otAgeLabel(otAge(r))}</td>
+        <td>${settle}</td>
+        <td><div class="actions">
+          ${r.canComplete ? '<button class="btn sm ok settle-btn">Settle</button>' : ''}
+          <button class="btn sm bad reverse-btn">Reverse</button>
+          <span class="result-msg ${st ? st.cls : ''}">${st ? escapeHtml(st.text) : ''}</span>
+        </div></td>
+      </tr>`;
+    }).join('');
+  }
+  otBulkBar();
 }
 
+function otBulkBar() {
+  const shown = otFiltered();
+  const sel = authRows.filter(r => otSelected.has(r.rrn));
+  $('otBulk').hidden = !sel.length || !!otRun;
+  $('otBulkCount').textContent = `${sel.length} selected`;
+  $('otBulkTotal').textContent = otTotals(sel);
+  const settleable = sel.filter(r => r.canComplete).length;
+  $('otSettle').textContent = settleable === sel.length ? 'Settle selected' : `Settle ${settleable} authorization${settleable === 1 ? '' : 's'}`;
+  $('otSettle').disabled = !settleable;
+  const allShown = shown.length && shown.every(r => otSelected.has(r.rrn));
+  $('otAll').checked = !!allShown;
+  $('otAll').indeterminate = !allShown && shown.some(r => otSelected.has(r.rrn));
+}
+
+function otSetRow(rrn, cls, text) {
+  otStatus[rrn] = { cls, text };
+  const tr = document.querySelector(`#authTableBody tr[data-rrn="${CSS.escape(rrn)}"]`);
+  if (tr) { const m = tr.querySelector('.result-msg'); m.className = 'result-msg ' + cls; m.textContent = text; }
+}
+
+// ---- one row: Settle / Reverse buttons ----
 async function followOn(btn, url, extra, label) {
   const tr = btn.closest('tr');
   const rrn = tr.dataset.rrn;
-  const msg = tr.querySelector('.result-msg');
   const buttons = tr.querySelectorAll('button');
-  tr.dataset.busy = '1';
   buttons.forEach(b => b.disabled = true);
-  msg.className = 'result-msg'; msg.textContent = 'sending…';
+  otSetRow(rrn, '', 'sending…');
+  const r = await otSend(url, rrn, extra);
+  if (r.ok) {
+    otSetRow(rrn, 'ok', `${r.code} · ${r.ms}ms`);
+    toast(`${label} approved for RRN ${rrn}`, 'ok');
+    setTimeout(() => { delete otStatus[rrn]; loadAuthorizations(); }, 1500);
+    return;
+  }
+  otSetRow(rrn, 'bad', r.why);
+  toast(`${label} failed for RRN ${rrn}: ${r.why}`, 'bad');
+  buttons.forEach(b => b.disabled = false);
+}
+
+async function otSend(url, rrn, extra) {
   try {
     const res = await apiFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rrn, ...extra }) });
     const d = await res.json();
-    if (d.ok) {
-      msg.className = 'result-msg ok'; msg.textContent = `${d.responseCode} · ${d.latencyMs}ms`;
-      toast(`${label} approved for RRN ${rrn}`, 'ok');
-      setTimeout(() => { delete tr.dataset.busy; loadAuthorizations(); }, 1500);
-      return;
-    }
-    const why = d.error || `${d.responseCode} ${CODE_DESC[d.responseCode] || 'declined'}`;
-    msg.className = 'result-msg bad'; msg.textContent = why;
-    toast(`${label} failed for RRN ${rrn}: ${why}`, 'bad');
+    if (d.ok) return { ok: true, code: d.responseCode, ms: d.latencyMs };
+    return { ok: false, why: d.error || `${d.responseCode} ${CODE_DESC[d.responseCode] || 'declined'}` };
   } catch (e) {
-    msg.className = 'result-msg bad'; msg.textContent = String(e);
+    return { ok: false, why: String(e.message || e) };
   }
-  buttons.forEach(b => b.disabled = false);
-  delete tr.dataset.busy;
 }
 
 document.addEventListener('click', (e) => {
@@ -802,6 +909,119 @@ document.addEventListener('click', (e) => {
   }
 });
 $('refreshAuthBtn').addEventListener('click', loadAuthorizations);
+
+// ---- selection ----
+$('authTableBody').addEventListener('change', (e) => {
+  if (!e.target.classList.contains('ot-chk')) return;
+  const tr = e.target.closest('tr');
+  e.target.checked ? otSelected.add(tr.dataset.rrn) : otSelected.delete(tr.dataset.rrn);
+  tr.classList.toggle('selected', e.target.checked);
+  otBulkBar();
+});
+$('otAll').addEventListener('change', () => {
+  for (const r of otFiltered()) $('otAll').checked ? otSelected.add(r.rrn) : otSelected.delete(r.rrn);
+  renderAuthTable();
+});
+$('otSelect').addEventListener('change', () => {
+  const v = $('otSelect').value;
+  $('otSelect').value = '';
+  const shown = otFiltered();
+  if (v === 'none') otSelected.clear();
+  else if (v === 'all') shown.forEach(r => otSelected.add(r.rrn));
+  else if (v === 'auth') { otSelected.clear(); shown.filter(r => r.canComplete).forEach(r => otSelected.add(r.rrn)); }
+  else if (v === 'old') { otSelected.clear(); shown.filter(r => otAge(r) > 15 * 60).forEach(r => otSelected.add(r.rrn)); }
+  renderAuthTable();
+});
+$('otClear').addEventListener('click', () => { otSelected.clear(); renderAuthTable(); });
+$('otType').addEventListener('change', renderAuthTable);
+$('otSearch').addEventListener('input', renderAuthTable);
+
+// ---- bulk settle / reverse ----
+async function otBulk(kind) {
+  const sel = authRows.filter(r => otSelected.has(r.rrn));
+  const items = kind === 'settle' ? sel.filter(r => r.canComplete) : sel;
+  if (!items.length) return;
+  const skipped = sel.length - items.length;
+  const targets = [...new Set(items.map(r => r.targetName || 'the active switch'))];
+  const verb = kind === 'settle' ? 'Settle' : 'Reverse';
+  const lines = [
+    `${verb} ${items.length} transaction${items.length === 1 ? '' : 's'} (${otTotals(items)})`,
+    `on ${targets.join(', ')}?`,
+    kind === 'settle' ? 'Each is settled at the amount in its Settle amount box.' : 'Each is fully reversed with its original RRN.',
+    skipped ? `${skipped} selected row${skipped === 1 ? ' is not an authorization and is' : 's are not authorizations and are'} skipped.` : '',
+    targets.some(t => /prod/i.test(t)) ? '\nThis includes a PRODUCTION switch — real accounts will be affected.' : '',
+  ].filter(Boolean);
+  if (!confirm(lines.join('\n'))) return;
+
+  otRun = { stop: false };
+  $('otBulk').hidden = true;
+  $('otSummary').hidden = true;
+  $('otProgress').hidden = false;
+  $('otStop').disabled = false;
+  document.querySelectorAll('#authTableBody button, #authTableBody input').forEach(el => { el.disabled = true; });
+  const url = kind === 'settle' ? '/api/complete' : '/api/reverse';
+  const ok = [], failed = [];
+  for (let i = 0; i < items.length; i++) {
+    if (otRun.stop) break;
+    const r = items[i];
+    $('otProgressText').textContent = `${kind === 'settle' ? 'Settling' : 'Reversing'} ${i + 1} of ${items.length} · RRN ${r.rrn}`;
+    $('otProgressFill').style.width = Math.round(i / items.length * 100) + '%';
+    otSetRow(r.rrn, '', 'sending…');
+    const res = await otSend(url, r.rrn, kind === 'settle' ? { amount: otSettleAmount(r) } : {});
+    if (res.ok) { ok.push(r); otSetRow(r.rrn, 'ok', `${res.code} · ${res.ms}ms`); otSelected.delete(r.rrn); }
+    else { failed.push({ r, why: res.why }); otSetRow(r.rrn, 'bad', res.why); }
+  }
+  const stopped = otRun.stop;
+  const notSent = items.length - ok.length - failed.length;
+  $('otProgressFill').style.width = '100%';
+  otRun = null;
+  $('otProgress').hidden = true;
+  const noun = kind === 'settle' ? 'settled' : 'reversed';
+  $('otSummary').innerHTML = `<b>${ok.length} ${noun}</b>` + (failed.length ? ` · <span class="bad">${failed.length} failed</span>` : '')
+    + (notSent ? ` · ${notSent} not sent (stopped)` : '') + (ok.length ? ` · ${escapeHtml(otTotals(ok))}` : '')
+    + (failed.length ? '<ul>' + failed.slice(0, 10).map(f => `<li class="mono">${escapeHtml(f.r.rrn)} — ${escapeHtml(f.why)}</li>`).join('') + (failed.length > 10 ? `<li>… and ${failed.length - 10} more (still selected)</li>` : '') + '</ul>' : '')
+    + '<button type="button" class="link-btn" id="otSummaryClose">Dismiss</button>';
+  $('otSummary').className = 'ot-summary ' + (failed.length ? 'bad' : 'ok');
+  $('otSummary').hidden = false;
+  toast(`${ok.length} ${noun}${failed.length ? `, ${failed.length} failed` : ''}${stopped ? ' (stopped)' : ''}`, failed.length ? 'bad' : 'ok');
+  for (const r of ok) delete otStatus[r.rrn];   // gone from the list after refresh
+  loadAuthorizations();
+}
+$('otSettle').addEventListener('click', () => otBulk('settle'));
+$('otReverse').addEventListener('click', () => otBulk('reverse'));
+$('otStop').addEventListener('click', () => { if (otRun) { otRun.stop = true; $('otStop').disabled = true; $('otProgressText').textContent += ' — stopping after this one'; } });
+document.addEventListener('click', (e) => { if (e.target.id === 'otSummaryClose') $('otSummary').hidden = true; });
+
+// ---- remove from list (nothing is sent to the switch) ----
+$('otForget').addEventListener('click', async () => {
+  const rrns = [...otSelected];
+  if (!rrns.length) return;
+  if (!confirm(`Remove ${rrns.length} transaction${rrns.length === 1 ? '' : 's'} from this list?\n\nNothing is sent to the switch: they stay as they are there (still held or posted). Use this for entries you've already settled or reversed some other way.`)) return;
+  try {
+    const res = await apiFetch('/api/authorizations/forget', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rrns }) });
+    const d = await res.json();
+    if (!res.ok || d.error) throw new Error(d.error || 'Request failed');
+    rrns.forEach(r => { otSelected.delete(r); delete otStatus[r]; });
+    toast(`Removed ${d.removed} from the list`, 'ok');
+    loadAuthorizations();
+  } catch (e) { toast(e.message, 'bad'); }
+});
+
+// ---- export ----
+$('otExport').addEventListener('click', () => {
+  const rows = otSelected.size ? authRows.filter(r => otSelected.has(r.rrn)) : otFiltered();
+  if (!rows.length) { toast('Nothing to export', 'bad'); return; }
+  const cols = ['type', 'switch', 'rrn', 'from_account', 'to_account', 'amount', 'currency', 'auth_code', 'captured_at', 'can_settle'];
+  const lines = [cols.join(',')].concat(rows.map(r => [typeById(r.txnLabel).name, r.targetName, r.rrn, r.account, r.toAccount, Number(r.amount).toFixed(2),
+    CCY_ALPHA[r.currencyCode] || r.currencyCode, r.authCode, new Date(r.capturedAtMs).toISOString(), r.canComplete ? 'yes' : 'no'].map(csvCell).join(',')));
+  download(`open-transactions-${new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '')}.csv`, '﻿' + lines.join('\r\n') + '\r\n', 'text/csv');
+});
+
+function setConn(online) {
+  $('conn').className = 'conn ' + (online ? 'online' : 'offline');
+  $('connText').textContent = online ? (AGENT.hosted ? 'Agent connected' : 'Console online') : (AGENT.hosted ? 'Agent offline' : 'Console offline');
+  if (online && !targetsState.targets.length) loadTargets();
+}
 
 // ---------- Views ----------
 function showView(v) {
@@ -911,6 +1131,7 @@ function renderUatTarget() {
   const steps = uatCases.filter(c => uatSelected.has(c.id)).reduce((a, c) => a + c.steps.length, 0);
   $('uatSummary').innerHTML = n ? `<b>${n} case${n > 1 ? 's' : ''}</b> · ${steps} message${steps > 1 ? 's' : ''} → ${escapeHtml(t ? t.name : '—')}<br><span class="muted">Runs one step at a time, in list order.</span>` : 'Select cases on the left.';
   $('uatRunBtn').disabled = !n || uatRunning;
+  renderSampleWarnings();
   renderRoles();
 }
 
@@ -1189,6 +1410,7 @@ const openCases = new Set();
 
 async function startUatRun(ids) {
   $('uatError').hidden = true;
+  if (!confirmSample(uatViewIssues())) return;
   const t = activeTarget();
   if (!ids.length) return;
   if (!$('uatTester').value.trim()) {
