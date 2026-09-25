@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SwitchProof</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="1" y="1" width="30" height="30" rx="8" class="bm-bg"/>
+      <path d="M8 20 L13 12 L17 18 L20 14 L24 20" class="bm-line"/>
+      <circle cx="24" cy="20" r="2" class="bm-dot"/>
+    </svg>
+    <div>
+      <div class="brand-name">SwitchProof</div>
+      <div class="brand-sub">ISO 8583 load, function &amp; UAT console</div>
+    </div>
+  </div>
+
+  <nav class="views" role="tablist" aria-label="Workspace">
+    <button type="button" role="tab" class="view-tab" data-view="load" aria-selected="true">Load test</button>
+    <button type="button" role="tab" class="view-tab" data-view="uat" aria-selected="false">UAT</button>
+  </nav>
+
+  <div class="target-wrap">
+    <button class="target" id="targetBtn" type="button" aria-haspopup="dialog" aria-expanded="false">
+      <span class="target-label">Target</span>
+      <span class="target-name" id="targetName">—</span>
+      <span class="target-value mono" id="targetAddr"></span>
+      <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <span class="conn" id="conn" title="Local console server"><span class="conn-dot"></span><span id="connText">Connecting…</span></span>
+
+    <div class="target-pop" id="targetPop" role="dialog" aria-label="Switch targets" hidden>
+      <div class="pop-head">
+        <b>Switch targets</b>
+        <span class="summary-hint">saved in targets.json · click one to use it</span>
+      </div>
+      <ul class="target-list" id="targetList"></ul>
+
+      <form class="target-form" id="targetForm" autocomplete="off">
+        <div class="pop-sub" id="tfTitle">Add a target</div>
+        <input type="hidden" id="tfId">
+        <div class="tf-grid">
+          <label class="field"><span>Name</span><input type="text" id="tfName" placeholder="SIT FEPI"></label>
+          <label class="field"><span>IP / host</span><input type="text" id="tfHost" class="mono" placeholder="192.168.1.11" required></label>
+          <label class="field"><span>Port</span><input type="number" id="tfPort" placeholder="2100" min="1" max="65535" required></label>
+        </div>
+        <div class="tf-actions">
+          <span class="tf-msg" id="tfMsg"></span>
+          <button type="button" class="btn sm ghost-plain" id="tfTest">Test</button>
+          <button type="button" class="btn sm ghost-plain" id="tfCancel" hidden>Cancel</button>
+          <button type="submit" class="btn sm primary-sm" id="tfSave">Add target</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="user-menu hosted-only">
+    <span class="user-email" id="userEmail"></span>
+    <button type="button" class="btn sm ghost-plain" id="agentDisconnect" title="Forget the pairing with this agent">Disconnect agent</button>
+    <button type="button" class="btn sm ghost-plain" data-signout>Sign out</button>
+  </div>
+
+  <button class="icon-btn" id="themeBtn" title="Toggle light / dark" aria-label="Toggle theme">
+    <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+  </button>
+</header>
+
+<div id="viewLoad">
+<main class="layout">
+
+  <!-- ================= COMPOSE ================= -->
+  <section class="compose">
+
+    <div class="card">
+      <div class="card-head">
+        <span class="step">1</span>
+        <h2>Transaction</h2>
+      </div>
+      <div class="type-grid" id="typeGrid" role="radiogroup" aria-label="Transaction type"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span class="step">2</span>
+        <h2>Data set</h2>
+        <button class="link-btn" id="templateBtn" type="button">
+          <svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14"/></svg>
+          Template
+        </button>
+      </div>
+
+      <div id="dataArea">
+        <div class="format">
+          <span class="format-label">Row format</span>
+          <div class="format-cols" id="formatCols"></div>
+        </div>
+
+        <label class="drop" id="drop">
+          <input type="file" id="fileInput" accept=".csv,.txt,.tsv">
+          <svg viewBox="0 0 24 24" class="drop-icon"><path d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          <span class="drop-title">Drop a CSV here or <u>browse</u></span>
+          <span class="drop-sub" id="dropSub">Header row optional · comma, semicolon or tab separated</span>
+        </label>
+
+        <details class="paste" id="pasteBox">
+          <summary>Or paste / edit rows</summary>
+          <textarea id="rowsText" rows="5" spellcheck="false"></textarea>
+        </details>
+
+        <div class="preview" id="preview" hidden>
+          <div class="preview-bar">
+            <span class="pill ok" id="validCount">0 valid</span>
+            <span class="pill bad" id="invalidCount" hidden>0 invalid</span>
+            <span class="preview-total" id="totalsLine"></span>
+            <button class="link-btn danger" id="clearBtn" type="button">Clear</button>
+          </div>
+          <div class="table-wrap short">
+            <table class="tbl">
+              <thead id="previewHead"></thead>
+              <tbody id="previewBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="empty-note" id="noDataNote" hidden>
+        Sign On is a network message and doesn't need any account data.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span class="step">3</span>
+        <h2>Load profile</h2>
+        <span class="tps" id="tpsHint">≈ 2 tx/s</span>
+      </div>
+      <div class="field-row three">
+        <label class="field">
+          <span>Executions</span>
+          <input type="number" id="count" value="10" min="1">
+        </label>
+        <label class="field">
+          <span>Over (seconds)</span>
+          <input type="number" id="duration" value="5" min="0" step="0.1">
+        </label>
+        <label class="field">
+          <span>Concurrency</span>
+          <input type="number" id="concurrency" value="20" min="1">
+        </label>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="matchRows" checked>
+        <span class="switch-track"></span>
+        <span class="switch-label">Match executions to uploaded rows <em id="matchHint"></em></span>
+      </label>
+    </div>
+
+    <details class="card collapsible" id="defaultsCard">
+      <summary class="card-head">
+        <span class="step">4</span>
+        <h2>Message defaults</h2>
+        <span class="summary-hint" id="defaultsSummary"></span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      </summary>
+      <p class="hint">Amount and currency are used when a row leaves them blank. Terminal, institutions, currency and card are <b>saved per target</b> (<span id="defaultsTarget">—</span>), so switching target loads that switch's own setup. UAT runs use them too.</p>
+      <div class="field-row two">
+        <label class="field"><span>Default amount</span><input type="number" id="amount" value="10.00" step="0.01"></label>
+        <label class="field"><span>Default currency</span><input type="text" id="currencyCode" value="951"></label>
+      </div>
+      <div class="saved-note" id="defaultsSaved" aria-live="polite"></div>
+      <div class="field-row three">
+        <label class="field"><span>Terminal ID</span><input type="text" id="terminalId" value="ATM1"></label>
+        <label class="field"><span>Acquiring inst.</span><input type="text" id="acquiringInstitution" value="100001"></label>
+        <label class="field"><span>Forwarding inst.</span><input type="text" id="forwardingInstitution" value="" placeholder="blank = omit F33"></label>
+      </div>
+      <div class="field-row two">
+        <label class="field"><span>Card number (PAN)</span><input type="text" id="pan" value="4000000000000002" class="mono"></label>
+        <label class="field"><span>Remote acquirer <em>UAT remote on-us steps</em></span><input type="text" id="remoteAcquirer" value="" class="mono" placeholder="not set"></label>
+      </div>
+      <label class="field">
+        <span>Rotate PANs <em>optional · one per line, overrides the card above</em></span>
+        <textarea id="pansText" rows="2" spellcheck="false" placeholder="4000000000000002"></textarea>
+      </label>
+    </details>
+
+    <div class="fire-bar">
+      <div class="fire-summary" id="fireSummary">—</div>
+      <div class="fire-actions">
+        <button class="btn ghost" id="cancelBtn" disabled>Abort</button>
+        <button class="btn primary" id="startBtn">
+          <svg viewBox="0 0 24 24"><path d="M7 4l12 8-12 8z"/></svg>
+          Run test
+        </button>
+      </div>
+    </div>
+    <div class="banner" id="errorBox" hidden></div>
+  </section>
+
+  <!-- ================= MONITOR ================= -->
+  <section class="monitor">
+
+    <div class="card run-card">
+      <div class="run-head">
+        <div>
+          <div class="run-title" id="runTitle">No run yet</div>
+          <div class="run-sub mono" id="progressText">Configure a test on the left and press Run.</div>
+        </div>
+        <span id="statusPill" class="status idle">Idle</span>
+      </div>
+      <div class="progress"><div id="progressFill" class="progress-fill"></div></div>
+
+      <div class="kpis">
+        <div class="kpi"><span class="kpi-val" id="stSent">0</span><span class="kpi-label">Sent</span></div>
+        <div class="kpi"><span class="kpi-val" id="stCompleted">0</span><span class="kpi-label">Completed</span></div>
+        <div class="kpi ok"><span class="kpi-val" id="stApproved">0</span><span class="kpi-label">Approved</span></div>
+        <div class="kpi bad"><span class="kpi-val" id="stDeclined">0</span><span class="kpi-label">Declined</span></div>
+        <div class="kpi warn"><span class="kpi-val" id="stErrors">0</span><span class="kpi-label">Errors</span></div>
+        <div class="kpi"><span class="kpi-val" id="stThroughput">0</span><span class="kpi-label">Tx / sec</span></div>
+        <div class="kpi"><span class="kpi-val" id="stAvgLatency">0</span><span class="kpi-label">Avg ms</span></div>
+        <div class="kpi"><span class="kpi-val" id="stMinMax">0 / 0</span><span class="kpi-label">Min / max ms</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Throughput &amp; latency</h2>
+        <div class="legend">
+          <span><i class="lg lg-tps"></i>Tx / sec</span>
+          <span><i class="lg lg-lat"></i>Avg ms</span>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart"></canvas><div class="chart-empty" id="chartEmpty">Live chart appears while a test runs</div></div>
+    </div>
+
+    <div class="split">
+      <div class="card">
+        <div class="card-head"><h2>Response codes</h2></div>
+        <div id="codeBars" class="code-bars"><div class="muted small">No responses yet</div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Errors</h2><span class="summary-hint">last 50</span></div>
+        <ul id="errorList" class="error-list"><li class="muted small">None</li></ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Recent transactions</h2>
+        <span class="summary-hint">newest first · up to 200</span>
+      </div>
+      <div class="table-wrap tall">
+        <table class="tbl">
+          <thead><tr><th>#</th><th>RRN</th><th>From</th><th>To</th><th class="num">Amount</th><th>Ccy</th><th>Result</th><th class="num">ms</th></tr></thead>
+          <tbody id="resultsTableBody"><tr><td colspan="8" class="muted small">Nothing sent yet</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<section class="card open-card">
+  <div class="card-head">
+    <h2>Open transactions</h2>
+    <span id="authCount" class="pill neutral">0 open</span>
+    <p class="hint inline">Approved Purchases, Withdrawals and Transfers land here. <b>Settle</b> sends a 0220 completion for a Purchase authorization; <b>Reverse</b> sends a 0400 that reuses the original RRN.</p>
+    <button id="refreshAuthBtn" class="link-btn" type="button">
+      <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 11V5m0 6h-6"/></svg>
+      Refresh
+    </button>
+  </div>
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead><tr><th>Type</th><th>RRN</th><th>From</th><th>To</th><th class="num">Amount</th><th>Ccy</th><th>Auth</th><th>Age</th><th>Settle amount</th><th></th></tr></thead>
+      <tbody id="authTableBody"><tr><td colspan="10" class="muted small">No open transactions</td></tr></tbody>
+    </table>
+  </div>
+</section>
+</div>
+
+<!-- ================= UAT ================= -->
+<div id="viewUat" hidden>
+<main class="uat-layout">
+
+  <section class="card uat-lib">
+    <div class="card-head">
+      <h2>Test cases</h2>
+      <span class="pill neutral" id="caseCount">0</span>
+      <div class="head-actions">
+        <button class="btn sm ghost-plain" id="caseTemplateBtn" type="button" title="Download the spreadsheet layout">Template</button>
+        <label class="btn sm ghost-plain" title="Import cases from CSV (same case_id replaces)">Import<input type="file" id="caseImport" accept=".csv,.txt,.tsv" hidden></label>
+        <button class="btn sm ghost-plain" id="caseExportBtn" type="button">Export</button>
+        <button class="btn sm primary-sm" id="caseNewBtn" type="button">+ New case</button>
+      </div>
+    </div>
+    <div class="uat-toolbar">
+      <label class="chk"><input type="checkbox" id="caseAll"> <span>All</span></label>
+      <input type="search" id="caseSearch" placeholder="Filter by id, name or action">
+      <button class="link-btn danger" id="caseDeleteBtn" type="button" disabled>Delete selected</button>
+    </div>
+    <ul class="case-list" id="caseList"><li class="muted small">Loading…</li></ul>
+  </section>
+
+  <section class="uat-side">
+    <div class="card">
+      <div class="card-head"><h2>Execute</h2><span class="summary-hint" id="uatTargetLine">—</span></div>
+      <div class="field-row two">
+        <label class="field"><span>Tester</span><input type="text" id="uatTester" placeholder="Name on the report" maxlength="60"></label>
+        <label class="field"><span>Defaults for this target</span><div class="defaults-line mono" id="uatDefaults">—</div></label>
+      </div>
+      <details class="roles" id="rolesBox">
+        <summary>
+          <span>Account roles for this target</span>
+          <span class="summary-hint" id="rolesHint"></span>
+          <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </summary>
+        <p class="hint">Cases can use <span class="mono">@ROLE</span> instead of an account number. Each target maps a role to its own account, so the same cases run on UAT and on production. Negative cases need an account that has been prepared in Flexcube, e.g. with a debit freeze.</p>
+        <div class="roles-grid" id="rolesGrid"></div>
+        <div class="saved-note" id="rolesSaved" aria-live="polite"></div>
+      </details>
+      <div class="fire-bar flat">
+        <div class="fire-summary" id="uatSummary">Select cases on the left.</div>
+        <button class="btn primary" id="uatRunBtn" type="button" disabled>
+          <svg viewBox="0 0 24 24"><path d="M7 4l12 8-12 8z"/></svg>
+          Run selected
+        </button>
+      </div>
+      <div class="banner" id="uatError" hidden></div>
+    </div>
+
+    <div class="card">
+      <div class="run-head">
+        <div>
+          <div class="run-title" id="uatRunTitle">No run open</div>
+          <div class="run-sub mono" id="uatRunSub">Results and evidence for a run appear here.</div>
+        </div>
+        <span id="uatRunStatus" class="status idle">Idle</span>
+      </div>
+      <div class="progress"><div id="uatProgress" class="progress-fill"></div></div>
+      <div class="run-actions" id="uatRunActions" hidden>
+        <a class="btn sm ghost-plain" id="uatReportBtn" target="_blank" rel="noopener">Open report (print to PDF)</a>
+        <a class="btn sm ghost-plain" id="uatCsvBtn">Evidence CSV</a>
+        <a class="btn sm ghost-plain" id="uatBankBtn" title="One row per case in the bank's test-sheet columns">Bank sheet CSV</a>
+      </div>
+      <div id="uatResults" class="uat-results"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Run history</h2><span class="summary-hint">saved in uat-runs/</span></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>Run</th><th>Target</th><th>Tester</th><th>Passed</th><th></th></tr></thead>
+          <tbody id="runHistory"><tr><td colspan="5" class="muted small">No runs yet</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+</div>
+
+<dialog class="case-dlg" id="caseDlg" aria-labelledby="cdTitle">
+  <form method="dialog" id="caseForm" autocomplete="off">
+    <div class="dlg-head">
+      <h2 id="cdTitle">New test case</h2>
+      <button type="button" class="t-btn" id="cdClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="cd-grid">
+      <label class="field"><span>Case ID <em>blank = next TC-nnn</em></span><input type="text" id="cdId" class="mono" maxlength="40"></label>
+      <label class="field"><span>Name</span><input type="text" id="cdName" required maxlength="120"></label>
+    </div>
+    <label class="field"><span>Description / scenario</span><textarea id="cdDesc" rows="2"></textarea></label>
+    <div class="cd-grid two">
+      <label class="field"><span>Pre-condition <em>optional</em></span><input type="text" id="cdPre" maxlength="300" placeholder="e.g. mark @ECD_CHK_FROZEN as Frozen in Flexcube"></label>
+      <label class="field"><span>Expected result <em>optional, shown on the report</em></span><input type="text" id="cdExp" maxlength="300"></label>
+    </div>
+
+    <div class="cd-steps-head">
+      <b>Steps</b>
+      <span class="summary-hint">Settle / Reverse act on the latest approved step above them. Accounts can be <span class="mono">@ROLE</span>. Expect: <span class="mono">00</span>, a list <span class="mono">05,51</span>, or <span class="mono">!00</span> = any decline.</span>
+    </div>
+    <div class="table-wrap">
+      <table class="tbl cd-steps">
+        <thead><tr><th>#</th><th>Action</th><th>From</th><th>To</th><th>Amount</th><th>Ccy</th><th>Settle amt</th><th>Card (opt.)</th><th title="Remote on-us: sent with the target's remote acquirer">Remote</th><th>Expect</th><th></th></tr></thead>
+        <tbody id="cdSteps"></tbody>
+      </table>
+    </div>
+    <div class="cd-add">
+      <span class="summary-hint">Add step:</span>
+      <button type="button" class="btn sm ghost-plain" data-add="PURCHASE">POS purchase</button>
+      <button type="button" class="btn sm ghost-plain" data-add="WITHDRAWAL">Withdrawal</button>
+      <button type="button" class="btn sm ghost-plain" data-add="TRANSFER">Transfer</button>
+      <button type="button" class="btn sm ghost-plain" data-add="BALANCE_INQUIRY">Balance</button>
+      <button type="button" class="btn sm ok" data-add="COMPLETION">+ Settle</button>
+      <button type="button" class="btn sm bad" data-add="REVERSAL">+ Reverse</button>
+    </div>
+    <div class="dlg-foot">
+      <span class="tf-msg bad" id="cdMsg"></span>
+      <button type="button" class="btn sm ghost-plain" id="cdCancel">Cancel</button>
+      <button type="submit" class="btn sm primary-sm" id="cdSave">Save case</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="gate" id="gate" hidden>
+  <div class="gate-card">
+    <div class="gate-brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" class="bm-bg"/><path d="M8 20 L13 12 L17 18 L20 14 L24 20" class="bm-line"/><circle cx="24" cy="20" r="2" class="bm-dot"/></svg>
+      <div><div class="brand-name">SwitchProof</div><div class="brand-sub">ISO 8583 load, function &amp; UAT testing for your switch</div></div>
+    </div>
+
+    <section class="gate-step" data-step="login" hidden>
+      <h1 id="glTitle">Sign in</h1>
+      <form id="glForm" autocomplete="on">
+        <label class="field"><span>Email</span><input type="email" id="glEmail" required autocomplete="username"></label>
+        <label class="field"><span>Password</span><input type="password" id="glPass" required minlength="8" autocomplete="current-password"></label>
+        <div class="gate-msg" id="glMsg" aria-live="polite"></div>
+        <button class="btn primary wide" id="glSubmit" type="submit">Sign in</button>
+      </form>
+      <div class="gate-links">
+        <button type="button" class="link-plain" id="glToggle">Create an account</button>
+        <button type="button" class="link-plain" id="glForgot">Forgot password?</button>
+      </div>
+    </section>
+
+    <section class="gate-step" data-step="connect" hidden>
+      <h1>Connect your agent</h1>
+      <p class="gate-lead">The console runs here, but messages to your switch are sent by a small agent on a PC inside your network. Your switch IPs, accounts and test evidence stay on that PC.</p>
+      <ol class="gate-steps">
+        <li>
+          <b>Download the agent</b>
+          <div class="gate-row"><button class="btn primary" id="gcDownload" type="button">Download agent (.zip)</button><span class="gate-msg" id="gcDlMsg"></span></div>
+          <span class="muted small">Needs Java 8 or later and your FLEXCUBE switch simulator (the agent uses your own licensed copy).</span>
+        </li>
+        <li><b>Point it at your simulator.</b> Unzip it and set <span class="mono">simulatorHome</span> in <span class="mono">agent.properties</span> to your simulator's version folder, e.g. <span class="mono">…\Simulator\Version_87</span>.</li>
+        <li><b>Start it</b> with <span class="mono">start.bat</span> (Windows) or <span class="mono">start.sh</span>. It opens this page already paired.</li>
+      </ol>
+      <details class="gate-manual">
+        <summary>Already running? Pair manually</summary>
+        <form id="gcForm" autocomplete="off">
+          <div class="field-row two">
+            <label class="field"><span>Agent address</span><input type="text" id="gcUrl" class="mono" placeholder="http://127.0.0.1:8787"></label>
+            <label class="field"><span>Pairing code <em>printed by the agent</em></span><input type="text" id="gcCode" class="mono"></label>
+          </div>
+          <button class="btn sm primary-sm" type="submit">Connect</button>
+        </form>
+      </details>
+      <div class="gate-msg" id="gcMsg" aria-live="polite"></div>
+      <div class="gate-links"><button type="button" class="link-plain" data-signout>Sign out</button></div>
+    </section>
+  </div>
+</div>
+
+
+<script src="config.js"></script>
+<script src="agent.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
