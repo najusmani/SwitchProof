@@ -6,8 +6,8 @@
 <title>SwitchProof</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260924230933">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=20260924231720">
 </head>
 <body>
 
@@ -409,99 +409,105 @@
   </form>
 </dialog>
 
-<div class="gate with-intro" id="gate" hidden>
- <div class="gate-shell">
-  <aside class="gate-intro" id="gateIntro">
-    <div class="gi-eyebrow">ISO 8583 testing for Oracle FLEXCUBE ATM/POS switches</div>
-    <h2 class="gi-title">Prove your card switch works before your customers find out it doesn't.</h2>
-    <p class="gi-lead">SwitchProof sends real ISO 8583 messages to your switch and checks every response: one transaction at a time, a full UAT test sheet, or thousands per minute under load.</p>
+<div class="gate" id="gate" hidden>
+  <aside class="gx-side" id="gateIntro" aria-label="About SwitchProof">
+    <div class="gx-side-inner">
+      <div class="gx-mark">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="2"/><path d="M6 15.5l3.5-6 3 4.5 2.2-3.2L18 15.5"/></svg>
+        <span class="brand-name">SwitchProof</span>
+      </div>
 
-    <ul class="gi-features">
-      <li>
-        <span class="gi-ico"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M7 9v6M17 9v6"/></svg></span>
-        <div><b>Every transaction type</b><span>ATM withdrawal, balance inquiry, POS purchase and settlement, account transfer, refund, cash deposit, sign-on and reversals, with account data uploaded from CSV or Excel.</span></div>
-      </li>
-      <li>
-        <span class="gi-ico"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg></span>
-        <div><b>UAT with evidence</b><span>Build or import test cases, chain steps (purchase, settle, reverse), set the expected response code, and get pass/fail with a printable report and a sheet in your bank's own format.</span></div>
-      </li>
-      <li>
-        <span class="gi-ico"><svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 4 8-9"/><path d="M14 6h6v6"/></svg></span>
-        <div><b>Load &amp; stress testing</b><span>Fire hundreds of concurrent transactions and watch throughput, latency and response codes live.</span></div>
-      </li>
-      <li>
-        <span class="gi-ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg></span>
-        <div><b>UAT and production side by side</b><span>Save each switch with its own acquirer, terminal, card and test accounts, and switch between them in one click.</span></div>
-      </li>
-      <li>
-        <span class="gi-ico"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
-        <div><b>Your data stays inside your bank</b><span>The console runs in your browser, but messages are sent by a small Windows app on a PC in your network. Switch addresses, accounts and evidence never reach this website.</span></div>
-      </li>
-    </ul>
+      <p class="gx-kicker">ISO 8583 &middot; Oracle FLEXCUBE ATM &amp; POS switch</p>
+      <h1 class="gx-title">Functional, UAT and load testing for your card switch.</h1>
+      <p class="gx-lead">Send real ISO&nbsp;8583 traffic to the switch, check every response against what you expect, and keep evidence of each result for sign&#8209;off.</p>
 
-    <div class="gi-how">
-      <div class="gi-how-title">How it works</div>
-      <ol>
-        <li><b>Sign in</b> and download SwitchProof for Windows</li>
-        <li><b>Open it</b> on a PC that can reach your switch</li>
-        <li><b>Add your switch</b> and start testing</li>
-      </ol>
+      <figure class="gx-trace" aria-label="Example message exchange">
+        <figcaption><span>Message log</span><span class="gx-live"><i></i>UAT switch</span></figcaption>
+        <ol>
+          <li><span class="t">09:41:02.118</span><span class="d">&rarr;</span><span class="m">0800</span><span class="x">Sign-on</span><span class="r"></span></li>
+          <li class="in"><span class="t">09:41:02.161</span><span class="d">&larr;</span><span class="m">0810</span><span class="x">Network management</span><span class="r ok">00</span></li>
+          <li><span class="t">09:41:02.402</span><span class="d">&rarr;</span><span class="m">0200</span><span class="x">310000 Balance inquiry</span><span class="r"></span></li>
+          <li class="in"><span class="t">09:41:02.440</span><span class="d">&larr;</span><span class="m">0210</span><span class="x">Approved &middot; 38&nbsp;ms</span><span class="r ok">00</span></li>
+          <li><span class="t">09:41:03.015</span><span class="d">&rarr;</span><span class="m">0100</span><span class="x">000000 Purchase &middot; 25.00 XCD</span><span class="r"></span></li>
+          <li class="in"><span class="t">09:41:03.061</span><span class="d">&larr;</span><span class="m">0110</span><span class="x">Approved &middot; auth 731045</span><span class="r ok">00</span></li>
+          <li><span class="t">09:41:03.580</span><span class="d">&rarr;</span><span class="m">0220</span><span class="x">Settlement &middot; 25.00 XCD</span><span class="r"></span></li>
+          <li class="in"><span class="t">09:41:03.627</span><span class="d">&larr;</span><span class="m">0230</span><span class="x">Posted</span><span class="r ok">00</span></li>
+          <li><span class="t">09:41:04.210</span><span class="d">&rarr;</span><span class="m">0200</span><span class="x">010000 Withdrawal &middot; above balance</span><span class="r"></span></li>
+          <li class="in"><span class="t">09:41:04.252</span><span class="d">&larr;</span><span class="m">0210</span><span class="x">Insufficient funds</span><span class="r warn">51 <em>pass</em></span></li>
+        </ol>
+      </figure>
+
+      <dl class="gx-caps">
+        <div><dt>Functional</dt><dd>Withdrawal, balance, purchase and settlement, transfer, refund, deposit and reversal, driven by CSV or Excel data.</dd></div>
+        <div><dt>UAT</dt><dd>Test-case library and scenario chains with expected response codes, pass/fail, printable evidence and your bank's test-sheet format.</dd></div>
+        <div><dt>Load</dt><dd>Hundreds of concurrent transactions with live throughput, latency and response-code breakdown.</dd></div>
+        <div><dt>Environments</dt><dd>UAT and production switches side by side, each with its own acquirer, terminal, card and test accounts.</dd></div>
+        <div><dt>Data residency</dt><dd>Messages are sent by a Windows agent inside your network. Switch addresses, accounts and evidence never reach this site.</dd></div>
+      </dl>
+
+      <p class="gx-foot">For use with the Oracle FLEXCUBE ATM/POS switch. Not affiliated with Oracle; Oracle and FLEXCUBE are trademarks of Oracle Corporation.</p>
     </div>
   </aside>
 
-  <div class="gate-card">
-    <div class="gate-brand">
-      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" class="bm-bg"/><path d="M8 20 L13 12 L17 18 L20 14 L24 20" class="bm-line"/><circle cx="24" cy="20" r="2" class="bm-dot"/></svg>
-      <div><div class="brand-name">SwitchProof</div><div class="brand-sub">ISO 8583 load, function &amp; UAT testing for your switch</div></div>
-    </div>
-
-    <section class="gate-step" data-step="login" hidden>
-      <h1 id="glTitle">Sign in</h1>
-      <form id="glForm" autocomplete="on">
-        <label class="field"><span>Email</span><input type="email" id="glEmail" required autocomplete="username"></label>
-        <label class="field"><span>Password</span><input type="password" id="glPass" required minlength="8" autocomplete="current-password"></label>
-        <div class="gate-msg" id="glMsg" aria-live="polite"></div>
-        <button class="btn primary wide" id="glSubmit" type="submit">Sign in</button>
-      </form>
-      <div class="gate-links">
-        <button type="button" class="link-plain" id="glToggle">Create an account</button>
-        <button type="button" class="link-plain" id="glForgot">Forgot password?</button>
-      </div>
-    </section>
-
-    <section class="gate-step" data-step="connect" hidden>
-      <h1>Connect your agent</h1>
-      <p class="gate-lead">The console runs here, but messages to your switch are sent by a small agent on a PC inside your network. Your switch IPs, accounts and test evidence stay on that PC.</p>
-      <ol class="gate-steps">
-        <li>
-          <b>Download SwitchProof</b> on a Windows PC that can reach your switch (bank network or VPN).
-          <div class="gate-row"><button class="btn primary" id="gcDownload" type="button">Download SwitchProof for Windows</button><span class="gate-msg" id="gcDlMsg"></span></div>
-          <span class="muted small"><span class="mono">SwitchProof-Setup.exe</span>, about 35 MB. Java is built in; nothing else to install. No admin rights needed.</span>
-        </li>
-        <li><b>Run the installer.</b> If Windows says <i>"Windows protected your PC"</i>, click <b>More info</b> → <b>Run anyway</b>.</li>
-        <li><b>Open SwitchProof</b> from the Start menu or desktop. A small SwitchProof window opens and this page reconnects, already paired. Keep that window open while you test.</li>
-        <li><b>Add your switch</b> under <b>Target</b> (top right): its IP and port.</li>
-      </ol>
-      <details class="gate-manual">
-        <summary>Already running? Pair manually</summary>
-        <form id="gcForm" autocomplete="off">
-          <div class="field-row two">
-            <label class="field"><span>Agent address</span><input type="text" id="gcUrl" class="mono" placeholder="http://127.0.0.1:8787"></label>
-            <label class="field"><span>Pairing code <em>printed by the agent</em></span><input type="text" id="gcCode" class="mono"></label>
-          </div>
-          <button class="btn sm primary-sm" type="submit">Connect</button>
+  <main class="gx-main">
+    <div class="gx-panel">
+      <section class="gate-step" data-step="login" hidden>
+        <p class="gx-eyebrow">Account</p>
+        <h2 id="glTitle">Sign in</h2>
+        <form id="glForm" autocomplete="on">
+          <label class="gx-field"><span>Email</span><input type="email" id="glEmail" required autocomplete="username"></label>
+          <label class="gx-field"><span>Password</span><input type="password" id="glPass" required minlength="8" autocomplete="current-password"></label>
+          <div class="gate-msg" id="glMsg" aria-live="polite"></div>
+          <button class="gx-btn" id="glSubmit" type="submit">Sign in</button>
         </form>
-      </details>
-      <div class="gate-msg" id="gcMsg" aria-live="polite"></div>
-      <div class="gate-links"><button type="button" class="link-plain" data-signout>Sign out</button></div>
-    </section>
-  </div>
- </div>
+        <div class="gate-links">
+          <button type="button" class="gx-link" id="glToggle">Create an account</button>
+          <button type="button" class="gx-link" id="glForgot">Forgot password?</button>
+        </div>
+      </section>
+
+      <section class="gate-step" data-step="connect" hidden>
+        <p class="gx-eyebrow">Set up</p>
+        <h2>Connect your agent</h2>
+        <p class="gx-note">The console runs in this browser. Messages to your switch are sent by SwitchProof for Windows on a PC inside your network.</p>
+        <ol class="gx-steps">
+          <li>
+            <b>Download SwitchProof for Windows</b>
+            <span>On a PC that can reach your switch (bank network or VPN). About 35&nbsp;MB, Java included, no admin rights needed.</span>
+            <div class="gate-row"><button class="gx-btn" id="gcDownload" type="button">Download SwitchProof-Setup.exe</button><span class="gate-msg" id="gcDlMsg"></span></div>
+          </li>
+          <li>
+            <b>Run the installer</b>
+            <span>If Windows shows <i>Windows protected your PC</i>, choose <b>More info</b>, then <b>Run anyway</b>.</span>
+          </li>
+          <li>
+            <b>Open SwitchProof</b>
+            <span>From the Start menu or desktop. This page reconnects automatically. Keep the SwitchProof window open while you test.</span>
+          </li>
+          <li>
+            <b>Add your switch</b>
+            <span>Under <b>Target</b>, top right: the switch IP address and port.</span>
+          </li>
+        </ol>
+        <details class="gate-manual">
+          <summary>Pair manually</summary>
+          <form id="gcForm" autocomplete="off">
+            <label class="gx-field"><span>Agent address</span><input type="text" id="gcUrl" class="mono" placeholder="http://127.0.0.1:8787"></label>
+            <label class="gx-field"><span>Pairing code <em>shown in the SwitchProof window</em></span><input type="text" id="gcCode" class="mono"></label>
+            <button class="gx-btn gx-btn-quiet" type="submit">Connect</button>
+          </form>
+        </details>
+        <div class="gate-msg" id="gcMsg" aria-live="polite"></div>
+        <div class="gate-links"><button type="button" class="gx-link" data-signout>Sign out</button></div>
+      </section>
+    </div>
+  </main>
 </div>
 
+<div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20260924230933"></script>
-<script src="agent.js?v=20260924230933"></script>
-<script src="app.js?v=20260924230933"></script>
+<script src="config.js?v=20260924231720"></script>
+<script src="agent.js?v=20260924231720"></script>
+<script src="app.js?v=20260924231720"></script>
 </body>
 </html>
