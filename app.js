@@ -80,23 +80,23 @@ function typeCode(t, target) {
 }
 
 const TEMPLATES = {
-  BUNDLE: 'from_account,to_account,amount,currency\n000100000001,000100000002,10.00,XCD\n000100000002,000100000001,5.00,XCD\n',
-  TRANSFER: 'from_account,to_account,amount,currency\n000100000001,000100000002,9.00,XCD\n000100000001,000100000002,12.50,951\n',
-  WITHDRAWAL: 'from_account,amount,currency\n000100000001,20.00,XCD\n000100000002,15.00,USD\n',
-  PURCHASE: 'from_account,amount,currency\n000100000001,18.00,XCD\n000100000002,25.00,USD\n',
-  REFUND: 'from_account,amount,currency\n000100000001,5.00,XCD\n',
-  CASH_DEPOSIT: 'from_account,amount,currency\n000100000001,50.00,XCD\n',
-  BALANCE_INQUIRY: 'from_account\n000100000001\n000100000002\n',
-  MINI_STATEMENT: 'from_account\n000100000001\n',
-  PIN_CHANGE: 'from_account\n000100000001\n',
-  CASH_ADVANCE: 'from_account,amount,currency\n000100000001,40.00,XCD\n',
-  PURCHASE_CASHBACK: 'from_account,amount,currency\n000100000001,30.00,XCD\n',
-  BILL_PAYMENT: 'from_account,to_account,amount,currency\n000100000001,000100000002,75.00,XCD\n',
-  OFFLINE_PURCHASE: 'from_account,amount,currency\n000100000001,12.00,XCD\n',
+  BUNDLE: 'from_account,to_account,amount,currency\n000123456001,000123456002,10.00,USD\n000123456002,000123456001,5.00,USD\n',
+  TRANSFER: 'from_account,to_account,amount,currency\n000123456001,000123456002,9.00,USD\n000123456001,000123456002,12.50,840\n',
+  WITHDRAWAL: 'from_account,amount,currency\n000123456001,20.00,USD\n000123456002,15.00,USD\n',
+  PURCHASE: 'from_account,amount,currency\n000123456001,18.00,USD\n000123456002,25.00,USD\n',
+  REFUND: 'from_account,amount,currency\n000123456001,5.00,USD\n',
+  CASH_DEPOSIT: 'from_account,amount,currency\n000123456001,50.00,USD\n',
+  BALANCE_INQUIRY: 'from_account\n000123456001\n000123456002\n',
+  MINI_STATEMENT: 'from_account\n000123456001\n',
+  PIN_CHANGE: 'from_account\n000123456001\n',
+  CASH_ADVANCE: 'from_account,amount,currency\n000123456001,40.00,USD\n',
+  PURCHASE_CASHBACK: 'from_account,amount,currency\n000123456001,30.00,USD\n',
+  BILL_PAYMENT: 'from_account,to_account,amount,currency\n000123456001,000123456002,75.00,USD\n',
+  OFFLINE_PURCHASE: 'from_account,amount,currency\n000123456001,12.00,USD\n',
 };
 
 // ISO 4217 alpha -> numeric, for the currencies this bank sees most.
-const CCY = { XCD: '951', USD: '840', EUR: '978', GBP: '826', CAD: '124', TTD: '780', BBD: '052', JMD: '388', INR: '356' };
+const CCY = { USD: '840', EUR: '978', GBP: '826', CAD: '124', INR: '356', XCD: '951', TTD: '780', BBD: '052', JMD: '388' };
 const CCY_ALPHA = Object.fromEntries(Object.entries(CCY).map(([a, n]) => [n, a]));
 function resolveCcy(v) {
   if (v == null) return null;
@@ -183,6 +183,7 @@ const targetLabel = (t) => (t ? `${t.name} (${t.host}:${t.port})` : '—');
 async function targetsApi(path, body) {
   const res = await apiFetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined);
   const data = await res.json();
+  if (res.status === 402) showUpgrade(data);
   if (!res.ok || data.error) throw new Error(data.error || 'Request failed');
   return data;
 }
@@ -203,14 +204,16 @@ function renderTargets() {
   const prof = profileOf(t);
   $('targetFmt').textContent = 'ISO ' + prof.version + (prof.verified ? '' : ' · untested');
   $('targetFmt').className = 'target-fmt' + (prof.verified ? '' : ' warn');
+  targetTitle();
   $('targetList').innerHTML = targetsState.targets.map(x => {
     const st = targetTests[x.id];
     return `<li class="t-item ${x.id === targetsState.active ? 'active' : ''}" data-id="${escapeHtml(x.id)}" title="Use this target">
       <span class="t-radio"></span>
-      <span class="t-main"><div class="t-name">${escapeHtml(x.name)}</div><div class="t-addr">${escapeHtml(x.host)}:${x.port} · ${escapeHtml(profileOf(x).name)}</div></span>
+      <span class="t-main"><div class="t-name">${escapeHtml(x.name)}</div><div class="t-addr">${escapeHtml(x.host)}:${x.port} · ${escapeHtml(profileOf(x).name)}${bankDb[x.id] && bankDb[x.id].configured ? ' · money check' : ''}</div></span>
       ${st ? `<span class="t-status ${st.ok ? 'ok' : 'bad'}">${escapeHtml(st.text)}</span>` : ''}
       <span class="t-actions">
         <button type="button" class="t-btn" data-act="test" title="Test TCP connection"><svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 14 0M8.5 12a3.5 3.5 0 0 1 7 0"/><circle cx="12" cy="16" r="1.5"/></svg></button>
+        <button type="button" class="t-btn" data-act="db" title="Bank database (money checks)"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6M5 12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6"/></svg></button>
         <button type="button" class="t-btn" data-act="edit" title="Edit"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg></button>
         <button type="button" class="t-btn del" data-act="del" title="Remove"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg></button>
       </span>
@@ -220,6 +223,7 @@ function renderTargets() {
   renderTypes();
   refreshSummaries();
   if (typeof renderUatTarget === 'function') renderUatTarget();
+  if (t && !(t.id in bankDb)) loadBankDb(t.id); else renderMoneyButtons();
 }
 
 function openTargets(open) {
@@ -260,6 +264,8 @@ $('targetList').addEventListener('click', async (e) => {
       $('tfProfile').value = t.profile || 'flexcube-87';
       $('tfTitle').textContent = `Edit ${t.name}`; $('tfSave').textContent = 'Save changes'; $('tfCancel').hidden = false;
       $('tfMsg').textContent = ''; $('tfHost').focus();
+    } else if (act === 'db') {
+      openDbDialog(t);
     } else if (act === 'del') {
       if (!confirm(`Remove target ${targetLabel(t)}?`)) return;
       targetsState = await targetsApi('/api/targets/delete', { id });
@@ -350,6 +356,7 @@ function setMode(m) {
   document.querySelectorAll('.mode-tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
   document.querySelectorAll('.bundle-only').forEach(el => { el.hidden = m !== 'bundle'; });
   $('bundleBox').hidden = m !== 'bundle';
+  renderPlan();
   renderTypes();
   renderBundle();
   onTypeChanged();
@@ -574,7 +581,7 @@ $('templateBtn').addEventListener('click', () => {
 // Browser-local: amount and rotating PANs. Per target (targets.json): terminal, institutions, currency, card.
 const LOCAL_FIELDS = ['amount', 'pansText'];
 const TARGET_FIELDS = ['terminalId', 'acquiringInstitution', 'forwardingInstitution', 'currencyCode', 'pan', 'remoteAcquirer'];
-const BUILTIN_DEFAULTS = { terminalId: 'ATM1', acquiringInstitution: '100001', forwardingInstitution: '', currencyCode: '951', pan: '4000000000000002', remoteAcquirer: '' };
+const BUILTIN_DEFAULTS = { terminalId: 'ATM1', acquiringInstitution: '100001', forwardingInstitution: '', currencyCode: '840', pan: '4000000000000002', remoteAcquirer: '' };
 const savedDefaults = store.get('defaults', null);
 if (savedDefaults) LOCAL_FIELDS.forEach(f => { if (savedDefaults[f] != null) $(f).value = savedDefaults[f]; });
 LOCAL_FIELDS.forEach(f => $(f).addEventListener('input', () => {
@@ -710,7 +717,7 @@ $('startBtn').addEventListener('click', async () => {
     return;
   }
   const defCcy = resolveCcy($('currencyCode').value);
-  if (!defCcy) { showError('Default currency is not recognised. Use a 3-digit code (951) or XCD / USD.'); return; }
+  if (!defCcy) { showError('Default currency is not recognised. Use a 3-digit code (840) or USD / EUR.'); return; }
   const skipped = parsed.length - rows.length;
 
   const payload = {
@@ -733,12 +740,14 @@ $('startBtn').addEventListener('click', async () => {
   try {
     const res = await apiFetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const data = await res.json();
+    if (res.status === 402) showUpgrade(data);
     if (!res.ok) { showError(data.error || 'Failed to start test'); return; }
     currentJobId = data.jobId;
     $('startBtn').disabled = true;
     $('cancelBtn').disabled = false;
     runName = at.name;
     $('runTitle').textContent = `${at.name} · ${payload.count} tx → ${data.target || ''}`;
+    renderMoneyButtons();
     setStatus('running', 'Running');
     resetMonitor();
     if (skipped) toast(`${skipped} invalid row${skipped > 1 ? 's' : ''} skipped`, 'bad');
@@ -761,7 +770,10 @@ function resetMonitor() {
   $('progressFill').style.width = '0%';
   $('progressText').textContent = 'starting…';
   $('codeBars').innerHTML = '<div class="muted small">No responses yet</div>';
-  $('resultsTableBody').innerHTML = '<tr><td colspan="9" class="muted small">Waiting for responses…</td></tr>';
+  $('resultsTableBody').innerHTML = '<tr><td colspan="10" class="muted small">Waiting for responses…</td></tr>';
+  moneyByKey = {};
+  $('moneySum').hidden = true;
+  $('resultsTable').classList.remove('with-money');
   $('kindCard').hidden = true;
   $('kindBody').innerHTML = '';
   $('errorList').innerHTML = '<li class="muted small">None</li>';
@@ -814,6 +826,7 @@ async function poll() {
     $('startBtn').disabled = false;
     $('cancelBtn').disabled = true;
     setStatus(d.status === 'DONE' ? 'done' : 'cancelled', d.status === 'DONE' ? 'Done' : 'Cancelled');
+    renderMoneyButtons();
     toast(`${runName}: ${d.approved} approved, ${d.declined} declined, ${d.errors} errors`, d.declined || d.errors ? 'bad' : 'ok');
     loadAuthorizations();
   }
@@ -874,8 +887,18 @@ function renderKinds(kinds) {
   </tr>`).join('');
 }
 
+// F54 balances from a reply: "ledger 9,899,514.85 · available 6,818,704.22"
+const fmtAmt = (v) => Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function balanceLine(bal) {
+  if (!bal || !bal.length) return '';
+  return `<div class="sub bal-line" title="F54 additional amounts">${bal.map(a => `${escapeHtml(a.label.replace(/ balance$/, ''))} <b>${escapeHtml(fmtAmt(a.amount))}</b>`).join(' · ')} <span class="muted">${escapeHtml(CCY_ALPHA[bal[0].currency] || bal[0].currency)}</span></div>`;
+}
+
 function renderResults(rows) {
+  lastResults = rows;
   if (!rows.length) return;
+  const withMoney = Object.keys(moneyByKey).length > 0;
+  $('resultsTable').classList.toggle('with-money', withMoney);
   $('resultsTableBody').innerHTML = rows.slice(-200).reverse().map(r => {
     const code = r.responseCode || (r.mti ? 'MTI:' + r.mti : 'NO_RESPONSE');
     const cls = r.ok ? 'ok' : r.error ? 'warn' : codeClass(code);
@@ -896,6 +919,7 @@ function renderResults(rows) {
       <td class="ccy">${escapeHtml(CCY_ALPHA[r.currencyCode] || r.currencyCode || '')}</td>
       <td>${result}</td>
       <td class="num">${r.latencyMs}</td>
+      <td class="money-col">${withMoney ? moneyPill(moneyByKey[r.index + '|' + (r.followUp || '')], r.rrn) : ''}</td>
     </tr>`;
   }).join('');
 }
@@ -1212,6 +1236,7 @@ $('otExport').addEventListener('click', () => {
 function setConn(online) {
   $('conn').className = 'conn ' + (online ? 'online' : 'offline');
   $('connText').textContent = online ? (AGENT.hosted ? 'Agent connected' : 'Console online') : (AGENT.hosted ? 'Agent offline' : 'Console offline');
+  targetTitle();
   if (online && !targetsState.targets.length) loadTargets();
 }
 
@@ -1244,6 +1269,7 @@ $('uatTester').addEventListener('input', () => store.set('tester', $('uatTester'
 async function uatApi(path, body) {
   const res = await apiFetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined);
   const data = await res.json();
+  if (res.status === 402) showUpgrade(data);
   if (!res.ok || data.error) throw new Error(data.error || 'Request failed');
   return data;
 }
@@ -1505,9 +1531,9 @@ function download(name, text, type) {
 }
 $('caseExportBtn').addEventListener('click', () => download('uat-cases.csv', '﻿' + casesToCsv(uatCases), 'text/csv'));
 $('caseTemplateBtn').addEventListener('click', () => download('uat-cases-template.csv', casesToCsv([
-  { id: 'TC-101', name: 'POS purchase then settle', description: 'Hold placed, then posted on settlement', steps: [{ action: 'PURCHASE', from: '000100000001', amount: '25.00', currency: '951', expect: '00' }, { action: 'COMPLETION', settleAmount: '25.00', expect: '00' }] },
-  { id: 'TC-102', name: 'Transfer then reverse', description: '', steps: [{ action: 'TRANSFER', from: '000100000001', to: '000100000002', amount: '9.00', expect: '00' }, { action: 'REVERSAL', expect: '00' }] },
-  { id: 'TC-103', name: 'Withdrawal over balance', description: 'Negative test', steps: [{ action: 'WITHDRAWAL', from: '000100000001', amount: '9999999.00', expect: '51' }] },
+  { id: 'TC-101', name: 'POS purchase then settle', description: 'Hold placed, then posted on settlement', steps: [{ action: 'PURCHASE', from: '000123456001', amount: '25.00', currency: '840', expect: '00' }, { action: 'COMPLETION', settleAmount: '25.00', expect: '00' }] },
+  { id: 'TC-102', name: 'Transfer then reverse', description: '', steps: [{ action: 'TRANSFER', from: '000123456001', to: '000123456002', amount: '9.00', expect: '00' }, { action: 'REVERSAL', expect: '00' }] },
+  { id: 'TC-103', name: 'Withdrawal over balance', description: 'Negative test', steps: [{ action: 'WITHDRAWAL', from: '000123456001', amount: '9999999.00', expect: '51' }] },
 ]), 'text/csv'));
 
 // RFC 4180-ish: quoted cells may contain the delimiter, quotes ("") and newlines.
@@ -1662,6 +1688,7 @@ function renderRun(run) {
   $('uatReportBtn').href = AGENT.link('/api/uat/report?id=' + encodeURIComponent(run.id));
   $('uatCsvBtn').href = AGENT.link('/api/uat/export?id=' + encodeURIComponent(run.id));
   $('uatBankBtn').href = AGENT.link('/api/uat/export?format=bank&id=' + encodeURIComponent(run.id));
+  $('uatMoneyRecheck').hidden = run.status === 'RUNNING' || !moneyOn(run.targetId);
 
   $('uatResults').innerHTML = run.cases.map(c => {
     const open = openCases.has(c.caseId) || (c.status === 'FAIL' && !openCases.has('!' + c.caseId));
@@ -1675,7 +1702,7 @@ function renderRun(run) {
         <td class="mono">${escapeHtml(expectLabel(s.expect))}</td>
         <td><span class="pill ${statusCls(s.status)} code" title="${escapeHtml(CODE_DESC[s.actual] || '')}">${escapeHtml(s.actual)}</span></td>
         <td class="num">${s.latencyMs != null ? s.latencyMs : ''}</td>
-        <td><span class="pill ${statusCls(s.status)}">${escapeHtml(s.status)}</span>${s.error ? `<div class="sub err">${escapeHtml(s.error)}</div>` : ''}</td>
+        <td><span class="pill ${statusCls(s.status)}">${escapeHtml(s.status)}</span>${s.error ? `<div class="sub err">${escapeHtml(s.error)}</div>` : ''}${uatMoney(s, run.targetId)}</td>
       </tr>`).join('');
     const pending = (c.definition || []).length - c.steps.length;
     return `<div class="res-case ${open ? 'open' : ''}" data-id="${escapeHtml(c.caseId)}">
@@ -1764,6 +1791,36 @@ function fbBadge() {
   $('fbBadge').hidden = !n;
   $('fbBadge').textContent = n;
   $('fbOpen').title = n ? `${n} of your requests ${n === 1 ? 'has' : 'have'} an update` : 'Request a feature or report a problem';
+  acctDot();
+}
+
+// ---------- Account menu (website): email, Feedback, Access, Disconnect, Sign out ----------
+function acctOpen(open) {
+  $('acctMenu').hidden = !open;
+  $('acctBtn').setAttribute('aria-expanded', String(open));
+}
+/** A dot on the account button when Feedback or Access has something new. */
+function acctDot() {
+  const count = (b) => (b.hidden ? 0 : Number(b.textContent) || 0);
+  const n = count($('fbBadge')) + ($('accessOpen').hidden ? 0 : count($('accBadge')));
+  $('acctDot').hidden = !n;
+  $('acctBtn').title = n ? `Account · ${n} new` : 'Account';
+}
+$('acctBtn').addEventListener('click', (e) => { e.stopPropagation(); acctOpen($('acctMenu').hidden); });
+$('acctMenu').addEventListener('click', (e) => { if (e.target.closest('.acct-item')) acctOpen(false); });
+document.addEventListener('click', (e) => { if (!$('acctMenu').hidden && !e.target.closest('.acct')) acctOpen(false); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('acctMenu').hidden) { acctOpen(false); $('acctBtn').focus(); } });
+// The button shows the first letter of the signed-in email (agent.js fills it in after sign-in).
+new MutationObserver(() => {
+  const email = $('userEmail').textContent.trim();
+  $('acctAvatar').textContent = email ? email[0].toUpperCase() : '';
+}).observe($('userEmail'), { childList: true, characterData: true, subtree: true });
+
+/** The target button's tooltip carries what no longer fits in the bar: format and connection. */
+function targetTitle() {
+  const parts = [$('targetName').textContent, $('targetAddr').textContent, $('targetFmt').textContent, $('connText').textContent]
+    .map(s => s.trim()).filter(s => s && s !== '—');
+  $('targetBtn').title = parts.join(' · ') + '. Click to change the target.';
 }
 function fbTableMissing(err) {
   return err && (/does not exist|schema cache|relation/i.test(err.message || '') || ['42P01', 'PGRST205', 'PGRST202'].includes(err.code));
@@ -1788,6 +1845,8 @@ async function fbLoad() {
   }
   fb.rows = rows.data || [];
   fb.admin = !admin.error && admin.data === true;
+  $('accessOpen').hidden = !fb.admin;
+  if (fb.admin && !$('accessDlg').open) accLoad(true).catch(() => {});   // new sales requests, renewals due
   fb.votes = new Map(fb.rows.map(r => [r.id, r.votes || 0]));
   fb.myVotes = new Set(fb.rows.filter(r => r.voted).map(r => r.id));
   fb.loaded = true;
@@ -1944,10 +2003,846 @@ $('fbForm').addEventListener('submit', async (e) => {
 // Show "updated" on the Feedback button after sign-in, without opening the dialog.
 AGENT.ready.then(() => { if (AGENT.hosted) fbLoad().catch(() => {}); });
 
+// ---------- Money side: what a transaction did in the core system (bank database, read-only) ----------
+const bankDb = {};          // target id -> database settings as the agent reports them (never the password)
+let moneyByKey = {};        // "index|followUp" -> money verdict for the latest load test
+let lastResults = [];
+
+async function loadBankDb(id) {
+  const first = !(id in bankDb);
+  try { bankDb[id] = await targetsApi('/api/bankdb?target=' + encodeURIComponent(id)); } catch (e) { bankDb[id] = null; }
+  if (first) renderTargets();   // shows "money check" on the target row
+  else renderMoneyButtons();
+  return bankDb[id];
+}
+const moneyOn = (id) => { const x = id || (activeTarget() || {}).id; return !!(x && bankDb[x] && bankDb[x].configured); };
+function renderMoneyButtons() {
+  const on = moneyOn();
+  $('moneyTrailBtn').hidden = !on;
+  $('otTrailBtn').hidden = !on;
+  $('moneyCheckBtn').hidden = !on || !currentJobId;
+  $('moneyCheckBtn').disabled = !!pollTimer;
+  $('switchReportBtn').hidden = !currentJobId;
+  if (currentJobId) $('switchReportBtn').href = AGENT.link('/api/report?id=' + encodeURIComponent(currentJobId));
+}
+
+const MONEY_PILL = { PASS: ['ok', '✓ as expected'], FAIL: ['bad', '✗ problem'], WAIT: ['warn', '⏳ not posted yet'] };
+function moneyPill(m, rrn) {
+  if (!m) return '';
+  const [cls, text] = MONEY_PILL[m.status] || ['neutral', '?'];
+  const note = m.status === 'PASS' && m.note ? ' ⚠' : '';
+  return `<button type="button" class="pill ${cls} mt-link" data-rrn="${escapeHtml(rrn || m.rrn || '')}" title="${escapeHtml(m.headline || '')}">${text}${note}</button>`;
+}
+function uatMoney(s, targetId) {
+  if (!s.money) return '';
+  const st = s.money.status;
+  const cls = st === 'PASS' ? 'ok' : st === 'FAIL' ? 'bad' : st === 'WAIT' ? 'warn' : 'neutral';
+  const mark = st === 'PASS' ? '✓' : st === 'FAIL' ? '✗' : st === 'WAIT' ? '⏳ not posted yet' : st === 'PENDING' ? 'checking…' : '?';
+  const note = st === 'FAIL' || st === 'ERROR' || st === 'WAIT' ? ' ' + escapeHtml(s.money.headline || '')
+    : s.money.note ? ` <span class="warn-t">⚠ ${escapeHtml(s.money.headline || '')}</span>` : '';
+  return `<div class="sub money-line"><button type="button" class="pill ${cls} mt-link" data-rrn="${escapeHtml(s.rrn || '')}" data-target="${escapeHtml(targetId || '')}" title="${escapeHtml(s.money.headline || '')}">money ${mark}</button>${note}</div>`;
+}
+
+// Load test: look up every recent transaction once the run is over.
+$('moneyCheckBtn').addEventListener('click', async () => {
+  if (!currentJobId) return;
+  const btn = $('moneyCheckBtn');
+  btn.disabled = true; btn.textContent = 'Checking…';
+  try {
+    const d = await targetsApi('/api/money/check-job?id=' + encodeURIComponent(currentJobId), {});
+    moneyByKey = Object.fromEntries(d.results.map(r => [r.index + '|' + (r.followUp || ''), r]));
+    renderResults(lastResults);
+    const probs = Object.entries(d.problems || {}).sort((a, b) => b[1] - a[1]);
+    const waits = Object.entries(d.waiting || {}).sort((a, b) => b[1] - a[1]);
+    const notes = Object.entries(d.notes || {}).sort((a, b) => b[1] - a[1]);
+    $('moneySum').innerHTML = `<b>Money side</b> of the latest ${d.checked} messages: <span class="ok-t">${d.pass} as expected</span>`
+      + (d.fail ? ` · <span class="bad-t">${d.fail} problem${d.fail > 1 ? 's' : ''}</span>` : '')
+      + (d.wait ? ` · <span class="warn-t">${d.wait} not posted yet</span>` : '')
+      + (!d.fail && !d.wait && !notes.length ? '. Nothing wrong.' : '')
+      + (probs.length || waits.length || notes.length ? `<ul>${probs.map(([k, n]) => `<li class="bad-t"><b>${n}×</b> ${escapeHtml(k)}</li>`).join('')}${waits.map(([k, n]) => `<li class="warn-t"><b>${n}×</b> ${escapeHtml(k)}</li>`).join('')}${notes.map(([k, n]) => `<li class="warn-t"><b>${n}×</b> ⚠ ${escapeHtml(k)}</li>`).join('')}</ul>` : '')
+      + (d.wait ? '<p class="muted small">FLEXCUBE can post minutes after the switch approves, especially under load. Press Check money side again later.</p>' : '');
+    $('moneySum').className = 'money-sum ' + (d.fail ? 'has-bad' : d.wait ? 'has-wait' : 'all-ok');
+    $('moneySum').hidden = false;
+  } catch (e) { toast(e.message, 'bad'); }
+  finally { btn.disabled = false; btn.textContent = 'Check money side'; }
+});
+
+// Bank database settings per target.
+let dbFor = null;
+async function openDbDialog(t) {
+  dbFor = t;
+  $('dbTitle').textContent = 'Bank database · ' + t.name;
+  $('dbMsg').textContent = '';
+  $('dbTest').hidden = true;
+  openTargets(false);
+  $('dbDlg').showModal();
+  const v = (await loadBankDb(t.id)) || {};
+  $('dbHost').value = v.host || '';
+  $('dbPort').value = v.port || 1521;
+  $('dbService').value = v.service || '';
+  $('dbSchema').value = v.schema || '';
+  $('dbUser').value = v.user || '';
+  $('dbPass').value = '';
+  $('dbPass').placeholder = v.hasPassword ? 'saved · leave blank to keep' : '';
+  $('dbMode').value = v.moneyCheck || 'report';
+  $('dbRemove').hidden = !v.configured;
+  $('dbDriverMsg').textContent = '';
+  renderDriver(v);
+  if (!can('money')) { $('dbMsg').className = 'fb-msg bad'; $('dbMsg').textContent = 'Money checks are part of the Enterprise plan.'; }
+}
+
+/** Which Oracle JDBC driver the agent uses and where it came from; the path box opens when none is found. */
+function renderDriver(v) {
+  const FROM = { chosen: 'the path you entered', settings: 'agent.properties', found: 'found automatically' };
+  const missing = v.driverMissing ? `<span class="warn-t">The driver you entered is no longer there (${escapeHtml(v.driverMissing)}).</span> ` : '';
+  $('dbDriver').innerHTML = v.driver
+    ? `${missing}Oracle JDBC driver${v.driverVersion ? ' ' + escapeHtml(v.driverVersion) : ''}: <span class="mono">${escapeHtml(v.driver)}</span>
+       <span class="muted">· ${FROM[v.driverSource] || ''}</span>
+       <button type="button" class="link-btn" id="dbDriverChange">Change</button>
+       ${v.driverSource === 'chosen' || v.driverMissing ? '<button type="button" class="link-btn" id="dbDriverAuto">Find automatically</button>' : ''}`
+    : `${missing}<b>Oracle JDBC driver not found.</b> Install the Oracle client on this PC, or enter where <span class="mono">ojdbc8.jar</span> is.
+       ${v.driverMissing ? '<button type="button" class="link-btn" id="dbDriverAuto">Find automatically</button>' : ''}`;
+  $('dbDriver').className = 'db-driver' + (v.driver ? '' : ' bad');
+  $('dbDriverEdit').hidden = !!v.driver;
+  $('dbDriverPath').value = v.driverSource === 'chosen' ? v.driver : '';
+}
+
+async function setDriver(path) {
+  $('dbDriverMsg').className = 'fb-msg'; $('dbDriverMsg').textContent = path ? 'loading the driver…' : 'searching…';
+  try {
+    const d = await targetsApi('/api/bankdb/driver', { path });
+    if (bankDb[dbFor.id]) Object.assign(bankDb[dbFor.id], d);
+    renderDriver(d);
+    $('dbDriverMsg').className = 'fb-msg ok';
+    $('dbDriverMsg').textContent = !d.driver ? '' : path ? `Using Oracle JDBC driver ${d.driverVersion || ''}`.trim() : 'Found automatically';
+  } catch (e) { $('dbDriverMsg').className = 'fb-msg bad'; $('dbDriverMsg').textContent = e.message; }
+}
+$('dbDriver').addEventListener('click', (e) => {
+  if (e.target.id === 'dbDriverChange') { $('dbDriverEdit').hidden = false; $('dbDriverPath').focus(); $('dbDriverPath').select(); }
+  if (e.target.id === 'dbDriverAuto') setDriver('');
+});
+$('dbDriverUse').addEventListener('click', () => setDriver($('dbDriverPath').value.trim()));
+$('dbDriverPath').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('dbDriverUse').click(); } });   // not the form's Save
+const dbFormValues = () => ({
+  target: dbFor.id, host: $('dbHost').value.trim(), port: $('dbPort').value, service: $('dbService').value.trim(),
+  schema: $('dbSchema').value.trim(), user: $('dbUser').value.trim(), password: $('dbPass').value, moneyCheck: $('dbMode').value,
+});
+const DB_TABLES = { switchLog: 'Switch log (RRN → reference)', entries: 'Accounting entries', blocks: 'Amount blocks', balances: 'Balances (current, blocked, uncollected, available)', accounts: 'Accounts', history: 'Entry history (after end of day)', trnCodes: 'Transaction descriptions' };
+$('dbTestBtn').addEventListener('click', async () => {
+  $('dbMsg').className = 'fb-msg'; $('dbMsg').textContent = 'connecting…'; $('dbTest').hidden = true;
+  try {
+    const r = await targetsApi('/api/bankdb/test', dbFormValues());
+    $('dbMsg').textContent = '';
+    const need = ['switchLog', 'entries'];
+    $('dbTest').innerHTML = r.error
+      ? `<p class="bad"><b>Could not connect.</b> ${escapeHtml(r.error)}</p>`
+      : `<p class="${r.ok ? 'ok' : 'bad'}"><b>${r.ok ? 'Connected' : 'Connected, but a required table is missing'}</b> as ${escapeHtml(r.connectedAs || '')} · ${escapeHtml(r.database || '')}</p>
+         <ul class="db-tables">${Object.keys(DB_TABLES).map(k => { const n = (r.tables || {})[k]; return `<li class="${n ? 'ok' : need.includes(k) ? 'bad' : 'muted'}"><span>${DB_TABLES[k]}</span><span class="mono">${escapeHtml(n || (need.includes(k) ? 'not readable' : 'not readable · optional'))}</span></li>`; }).join('')}</ul>`;
+    $('dbTest').hidden = false;
+  } catch (e) { $('dbMsg').className = 'fb-msg bad'; $('dbMsg').textContent = e.message; }
+});
+$('dbForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    bankDb[dbFor.id] = await targetsApi('/api/bankdb', dbFormValues());
+    $('dbPass').value = '';
+    $('dbPass').placeholder = bankDb[dbFor.id].hasPassword ? 'saved · leave blank to keep' : '';
+    $('dbRemove').hidden = false;
+    $('dbMsg').className = 'fb-msg ok'; $('dbMsg').textContent = 'saved';
+    renderTargets();
+  } catch (err) { $('dbMsg').className = 'fb-msg bad'; $('dbMsg').textContent = err.message; }
+});
+$('dbRemove').addEventListener('click', async () => {
+  if (!confirm(`Remove the bank database settings for ${dbFor.name}? Money checks stop for this target.`)) return;
+  try {
+    bankDb[dbFor.id] = await targetsApi('/api/bankdb', { target: dbFor.id, remove: true });
+    $('dbDlg').close();
+    renderTargets();
+    toast('Bank database settings removed', 'ok');
+  } catch (err) { toast(err.message, 'bad'); }
+});
+$('dbClose').addEventListener('click', () => $('dbDlg').close());
+
+// A finished UAT run's money side, looked up again (e.g. once FLEXCUBE has caught up).
+$('uatMoneyRecheck').addEventListener('click', async () => {
+  if (!uatRunId) return;
+  const btn = $('uatMoneyRecheck');
+  btn.disabled = true; btn.textContent = 'Checking…';
+  try { renderRun(await uatApi('/api/uat/money-recheck?id=' + encodeURIComponent(uatRunId), {})); toast('Money side checked again', 'ok'); }
+  catch (e) { toast(e.message, 'bad'); }
+  finally { btn.disabled = false; btn.textContent = 'Check money again'; }
+});
+
+// Money trail: every message, block, entry and balance for one RRN.
+let trailTarget = null;
+function openTrail(rrn, targetId) {
+  trailTarget = targetId || (activeTarget() || {}).id;
+  $('mtMsg').textContent = '';
+  $('mtDlg').showModal();
+  if (rrn) { $('mtRrn').value = rrn; lookupTrail(); }
+  else { $('mtBody').innerHTML = ''; $('mtRrn').focus(); }
+}
+async function lookupTrail() {
+  const rrn = $('mtRrn').value.trim();
+  if (!rrn) return;
+  $('mtMsg').className = 'fb-msg'; $('mtMsg').textContent = 'looking up…';
+  try {
+    const d = await targetsApi(`/api/money/trail?target=${encodeURIComponent(trailTarget || '')}&rrn=${encodeURIComponent(rrn)}`);
+    $('mtMsg').textContent = '';
+    renderTrail(d);
+  } catch (e) { $('mtMsg').className = 'fb-msg bad'; $('mtMsg').textContent = e.message; $('mtBody').innerHTML = ''; }
+}
+const money2 = (v) => (v == null || v === '' ? '' : Number(v).toFixed(2));
+// FLEXCUBE accounting events
+const EVENTS = { INIT: 'Initiation', REVR: 'Reversal' };
+const eventText = (e) => `<span title="Event ${escapeHtml(e)}">${escapeHtml(EVENTS[e] || e)}</span>`;
+// Mini statement: each line of the reply next to the FLEXCUBE entry it points at.
+function statementTable(lines, codes) {
+  if (!lines || !lines.length) return '';
+  const txn = (c) => `<span title="Transaction code ${escapeHtml(c)}">${escapeHtml((codes || {})[c] || c)}</span>`;
+  const signed = (x) => (Number(x) < 0 ? '−' : '') + fmtAmt(Math.abs(Number(x)));
+  const rows = lines.map((l, i) => {
+    const e = l.entry;
+    const amt = e ? (Number(e.fcy_amount) ? e.fcy_amount : e.lcy_amount) : null;
+    return `<tr class="${l.match ? '' : 'row-bad'}">
+      <td class="muted">${i + 1}</td>
+      <td class="mono">${escapeHtml(l.valueDate)}</td><td>${txn(l.code)}</td><td>${l.drcr === 'D' ? 'Dr' : 'Cr'}</td><td class="num">${escapeHtml(signed(l.amount))}</td>
+      <td class="mt-sep"></td>
+      ${e ? `<td class="mono">${escapeHtml(e.trn_ref_no)}</td><td>${eventText(e.event)}</td><td>${txn(e.trn_code)}</td><td>${e.drcr_ind === 'D' ? 'Dr' : 'Cr'}</td><td class="num">${escapeHtml(signed(amt))}</td>`
+          : '<td colspan="5" class="muted">no FLEXCUBE entry with this sequence</td>'}
+      <td>${l.match ? '<span class="ok-t">✓</span>' : '<span class="bad-t">✗</span>'}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="table-wrap mt-stmt"><table class="tbl">
+    <thead><tr><th>#</th><th colspan="4">Mini statement in the reply</th><th class="mt-sep"></th><th colspan="5">FLEXCUBE entry</th><th></th></tr>
+    <tr><th></th><th>Value date</th><th>Transaction</th><th></th><th class="num">Amount</th><th class="mt-sep"></th><th>Reference</th><th>Event</th><th>Transaction</th><th></th><th class="num">Amount</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+// The FLEXCUBE switch logs times as YYYY:DD:MM hh:mm:ss.ffffff
+const switchTime = (t) => { const m = /^(\d{4}):(\d{2}):(\d{2}) (\d{2}:\d{2}:\d{2})/.exec(t || ''); return m ? `${m[1]}-${m[3]}-${m[2]} ${m[4]}` : t; };
+function renderTrail(d) {
+  if (!d.messages.length) { $('mtBody').innerHTML = `<p class="fb-empty">The switch log on ${escapeHtml(d.target)} has no message with RRN ${escapeHtml(d.rrn)}.</p>`; return; }
+  const msgs = d.verdicts.map((v, i) => {
+    const m = d.messages[i];
+    const ok = v.status === 'PASS';
+    return `<li class="mt-msg ${ok ? '' : v.status === 'WAIT' ? 'is-wait' : 'is-bad'}">
+      <div class="mt-msg-head">
+        <span class="mono mt-mti">${escapeHtml(v.mti)}</span>
+        <span class="mono muted">${escapeHtml(m.proc_code || '')}</span>
+        <span class="mt-kind">${escapeHtml(v.label || '')}</span>
+        <span class="pill ${OK_CODES.has(v.resp) ? 'ok' : 'bad'} code" title="${escapeHtml(CODE_DESC[v.resp] || '')}">${escapeHtml(v.resp || '—')}</span>
+        <span class="pill ${ok ? 'ok' : v.status === 'WAIT' ? 'warn' : 'bad'}">${ok ? 'money ✓' : v.status === 'WAIT' ? 'money ⏳' : 'money ✗'}</span>
+      </div>
+      <ul class="mt-checks">${v.checks.map(c => `<li class="${c.ok === true ? 'ok' : c.ok === false ? 'bad' : c.wait ? 'wait' : c.warn ? 'warn' : 'muted'}">${escapeHtml(c.text)}</li>`).join('')}</ul>
+      ${balanceLine(v.balances)}${statementTable(v.statement, d.trnCodes)}
+      <div class="mt-meta mono">${[v.amount && 'amount ' + money2(v.amount), m.from_acc && 'from ' + m.from_acc, m.to_acc && 'to ' + m.to_acc,
+        v.trnRef && 'ref ' + v.trnRef, v.block && 'block ' + v.block, v.switchError, m.db_in_time && 'logged ' + switchTime(m.db_in_time)].filter(Boolean).map(escapeHtml).join(' · ')}</div>
+    </li>`;
+  }).join('');
+  const blocks = Object.values(d.blocks || {}).flat();
+  const legs = Object.values(d.entries || {}).flat();
+  const accts = Object.values(d.accounts || {});
+  const table = (head, rows) => rows ? `<div class="table-wrap"><table class="tbl"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>` : '';
+  const amtCell = (v) => (v == null || v === '' ? '<span class="muted">—</span>' : escapeHtml(fmtAmt(v)));
+  $('mtBody').innerHTML = `<ol class="mt-msgs">${msgs}</ol>`
+    + (blocks.length ? `<h3 class="mt-h">Amount blocks</h3>` + table('<th>Block</th><th>Account</th><th class="num">Amount</th><th>Status</th><th>Effective</th>',
+        blocks.map(b => `<tr><td class="mono">${escapeHtml(b.amount_block_no)}</td><td class="mono">${escapeHtml(b.account)}</td><td class="num">${money2(b.amount)}</td><td>${b.record_stat === 'O' ? '<span class="pill warn">open</span>' : '<span class="pill neutral">closed</span>'}</td><td class="mono">${escapeHtml(String(b.effective_date || '').slice(0, 10))}</td></tr>`).join('')) : '')
+    + (legs.length ? `<h3 class="mt-h">Accounting entries <span class="muted">customer accounts</span></h3>` + table('<th>Reference</th><th>Event</th><th>Account</th><th>Dr/Cr</th><th class="num">Amount</th><th>Ccy</th><th>Transaction</th><th>Value date</th>',
+        legs.map(l => `<tr><td class="mono">${escapeHtml(l.trn_ref_no)}</td><td>${eventText(l.event)}</td><td class="mono">${escapeHtml(l.ac_no)}</td><td>${l.drcr_ind === 'D' ? 'Debit' : 'Credit'}</td><td class="num">${money2(Number(l.fcy_amount) ? l.fcy_amount : l.lcy_amount)}</td><td>${escapeHtml(l.ac_ccy)}</td><td title="Transaction code ${escapeHtml(l.trn_code)}">${escapeHtml((d.trnCodes || {})[l.trn_code] || l.trn_code)}</td><td class="mono">${escapeHtml(String(l.value_dt || '').slice(0, 10))}</td></tr>`).join('')) : '')
+    + (accts.length ? `<h3 class="mt-h">Balances now</h3>` + table('<th>Account</th><th>Ccy</th><th class="num">Current</th><th class="num">Blocked</th><th class="num">Uncollected</th><th class="num">Available</th><th class="num">Net</th>',
+        accts.map(a => `<tr><td class="mono">${escapeHtml(a.cust_ac_no)}</td><td>${escapeHtml(a.ccy)}</td><td class="num">${amtCell(a.current_balance)}</td><td class="num">${amtCell(a.blocked_amount)}</td><td class="num">${amtCell(a.uncollected)}</td><td class="num">${amtCell(a.available_balance)}</td><td class="num">${amtCell(a.net_bal)}</td></tr>`).join('')) : '');
+}
+$('mtForm').addEventListener('submit', (e) => { e.preventDefault(); lookupTrail(); });
+$('mtClose').addEventListener('click', () => $('mtDlg').close());
+$('moneyTrailBtn').addEventListener('click', () => openTrail());
+$('otTrailBtn').addEventListener('click', () => openTrail());
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('.mt-link[data-rrn]');
+  if (b && b.dataset.rrn) openTrail(b.dataset.rrn, b.dataset.target || undefined);
+});
+
+// ---------- Plans: what this installation may use (licence from the SwitchProof website) ----------
+const PLAN_NAMES = { free: 'Free', team: 'Team', enterprise: 'Enterprise', developer: 'Developer' };
+let license = { plan: 'free', features: [], limits: { count: 200, concurrency: 5, uatCases: 10 }, featureNames: {} };
+const can = (f) => (license.features || []).includes(f);
+
+async function loadLicense() {
+  try { license = await targetsApi('/api/license'); } catch (e) { /* keep what we had */ }
+  renderPlan();
+}
+
+/** On the website: fetch this user's signed licence and hand it to the agent on this PC. */
+let licenseProblem = null;
+async function refreshLicense() {
+  const sb = AGENT.hosted && AGENT.supabase ? AGENT.supabase() : null;
+  if (sb) {
+    try {
+      const { data, error } = await sb.functions.invoke('license', { body: {} });
+      if (error) throw error;
+      if (data && data.token) {
+        license = await targetsApi('/api/license', { token: data.token });
+        licenseProblem = null;
+        renderPlan();
+        return;
+      }
+    } catch (e) { licenseProblem = (e && e.message) || String(e); }
+  }
+  await loadLicense();
+}
+
+function renderPlan() {
+  const name = PLAN_NAMES[license.plan] || license.plan;
+  const b = $('planBtn');
+  b.textContent = name;
+  b.className = 'plan-badge p-' + license.plan;
+  b.title = license.expires ? `${name} plan until ${license.expires}` : `${name} plan`;
+  document.querySelector('.mode-tab[data-mode="bundle"]').classList.toggle('locked', !can('bundles'));
+  $('bundleLock').hidden = can('bundles') || mode !== 'bundle';
+  const lim = license.limits || {};
+  $('freeLimits').hidden = can('unlimited');
+  $('freeLimits').textContent = `Free: up to ${lim.count} per run, ${lim.concurrency} at once`;
+  $('uatLimit').hidden = can('uat');
+  $('uatLimit').textContent = `Free: up to ${lim.uatCases} cases per run`;
+  if ($('planDlg').open) renderPlanDialog();
+}
+
+function renderPlanDialog() {
+  const name = PLAN_NAMES[license.plan] || license.plan;
+  $('planTitle').textContent = name;
+  const sub = [];
+  if (license.plan === 'developer') sub.push('Developer build: every feature is on.');
+  else if (license.plan === 'free') sub.push('Free: load tests, open transactions and UAT runs within the limits below.');
+  else sub.push(`${name}${license.expires ? ' until ' + license.expires : ''}${license.source ? ' · ' + license.source : ''}.`);
+  if (license.email && license.plan !== 'developer') sub.push('Signed in as ' + license.email + '.');
+  $('planSub').innerHTML = sub.map(escapeHtml).join(' ')
+    + (license.rejected ? `<br><span class="warn-t">${escapeHtml(license.rejected)}</span>` : '')
+    + (licenseProblem && fb.admin ? `<br><span class="warn-t">Licence service: ${escapeHtml(licenseProblem)} (deploy the "license" Edge Function)</span>` : '');
+  const names = license.featureNames || {};
+  const lim = license.limits || {};
+  $('planFeatures').innerHTML = Object.entries(names).map(([k, n]) => {
+    const on = can(k);
+    const need = k === 'money' ? 'Enterprise' : 'Team';
+    return `<li class="${on ? 'on' : 'off'}">${escapeHtml(n)}${on ? '' : ` <span class="muted">· ${need}</span>`}</li>`;
+  }).join('') + (can('unlimited') ? '' : `<li class="note">Free load tests: up to ${lim.count} per run, ${lim.concurrency} at once. UAT: up to ${lim.uatCases} cases per run.</li>`);
+  $('planCodeForm').hidden = !AGENT.hosted;
+  $('planLocal').hidden = AGENT.hosted || license.plan === 'developer';
+  renderOffers();
+}
+
+function showUpgrade(d) {
+  const plan = String(d.plan || 'Team').toLowerCase();
+  const card = canBuy(plan);
+  $('upTitle').textContent = `Part of the ${PLAN_NAMES[plan] || d.plan} plan`;
+  $('upText').textContent = d.error || '';
+  $('upHow').textContent = !AGENT.hosted ? 'Plans come with your SwitchProof account on the SwitchProof website.'
+    : card ? `Buy ${PLAN_NAMES[plan]} by card now, talk to us for an invoice, or enter an invite code under My plan.`
+    : 'Talk to us for a price, or enter an invite code under My plan.';
+  $('upBuy').hidden = !card;
+  $('upBuy').textContent = `Buy ${PLAN_NAMES[plan]} by card`;
+  $('upBuy').dataset.plan = plan;
+  $('upQuote').hidden = !AGENT.hosted;
+  $('upQuote').dataset.plan = plan;
+  $('upOk').hidden = card;
+  if (!$('upgradeDlg').open) $('upgradeDlg').showModal();
+}
+
+// ---------- Buying: card checkout (Paddle) and "Talk to us" requests ----------
+// The browser only opens the checkout. The plan is granted by the paddle-webhook Edge Function after
+// Paddle confirms the payment, from the price that was paid, and reaches this PC as a signed licence.
+const paddleCfg = () => (window.SWITCHPROOF_CONFIG || {}).paddle || null;
+const PLAN_RANK = { free: 0, team: 1, enterprise: 2, developer: 3 };
+const OFFERS = {
+  team: 'Unlimited load tests, bundles, full UAT runs, printable reports and every ISO 8583 format.',
+  enterprise: 'Everything in Team, plus money checks: blocks, postings and balances read from the bank database.',
+};
+const prices = {};          // plan -> "US$100.00 / month · 7-day free trial", from Paddle
+let paddleLoading = null, buying = null;
+const canBuy = (plan) => { const c = paddleCfg(); return !!(AGENT.hosted && c && c.token && c.prices && c.prices[plan]); };
+const daysLeft = (day) => day ? Math.ceil((Date.parse(day + 'T23:59:59') - Date.now()) / 86400e3) : Infinity;
+
+function loadPaddle() {
+  const cfg = paddleCfg();
+  const start = () => {
+    if (cfg.environment === 'sandbox') window.Paddle.Environment.set('sandbox');
+    window.Paddle.Initialize({ token: cfg.token, eventCallback: paddleEvent });
+    return window.Paddle;
+  };
+  if (!paddleLoading) paddleLoading = new Promise((resolve, reject) => {
+    if (window.Paddle && window.Paddle.Checkout) { resolve(start()); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.paddle.com/paddle/v2/paddle.js';
+    s.onload = () => { try { resolve(start()); } catch (e) { reject(e); } };
+    s.onerror = () => reject(new Error('The card checkout could not load. Check the internet connection, or use Talk to us.'));
+    document.head.appendChild(s);
+  }).catch((e) => { paddleLoading = null; throw e; });
+  return paddleLoading;
+}
+
+async function loadPrices() {
+  const cfg = paddleCfg();
+  if (!cfg || Object.keys(prices).length) return;
+  try {
+    const P = await loadPaddle();
+    const ids = Object.values(cfg.prices).filter(Boolean);
+    const r = await P.PricePreview({ items: ids.map(priceId => ({ priceId, quantity: 1 })) });
+    const lines = (r && r.data && r.data.details && r.data.details.lineItems) || [];
+    for (const li of lines) {
+      const plan = Object.keys(cfg.prices).find(k => li.price && cfg.prices[k] === li.price.id);
+      const cyc = li.price && li.price.billingCycle;
+      const per = cyc ? ' / ' + (cyc.frequency > 1 ? `${cyc.frequency} ${cyc.interval}s` : cyc.interval) : '';
+      const t = li.price && li.price.trialPeriod;
+      const trial = !t ? '' : ` · ${t.interval === 'week' ? 7 * (t.frequency || 1) + '-day' : (t.frequency || 1) + '-' + t.interval} free trial`;
+      if (plan && li.formattedTotals) prices[plan] = li.formattedTotals.total + per + trial;
+    }
+    renderOffers();
+  } catch (e) { /* prices are shown in the checkout anyway */ }
+}
+
+function renderOffers() {
+  const show = AGENT.hosted && license.plan !== 'developer';
+  $('planBuy').hidden = !show;
+  if (!show) return;
+  const mine = PLAN_RANK[license.plan] || 0;
+  const renew = daysLeft(license.expires) <= 30 && license.source !== 'Paid by card';
+  $('planOffers').innerHTML = ['team', 'enterprise']
+    .filter(p => PLAN_RANK[p] > mine || (PLAN_RANK[p] === mine && renew))
+    .map(p => {
+      const again = PLAN_RANK[p] === mine;
+      return `<div class="plan-offer">
+        <div class="plan-offer-head"><strong>${again ? 'Renew ' : ''}${PLAN_NAMES[p]}</strong><span class="plan-price mono">${escapeHtml(prices[p] || '')}</span></div>
+        <p>${escapeHtml(OFFERS[p])}</p>
+        ${canBuy(p) ? `<button type="button" class="btn primary sm" data-buy="${p}">${again ? 'Renew' : 'Buy'} by card</button>`
+                    : `<button type="button" class="btn ghost sm" data-quote="${p}">Ask for a price</button>`}
+      </div>`;
+    }).join('');
+  if (canBuy('team') || canBuy('enterprise')) loadPrices();
+}
+
+async function signedInUser() {
+  const sb = AGENT.supabase && AGENT.supabase();
+  if (!sb) return null;
+  const { data } = await sb.auth.getSession();
+  return data && data.session ? data.session.user : null;
+}
+
+async function buy(plan) {
+  if (!canBuy(plan)) return openQuote(plan);
+  const user = await signedInUser();
+  if (!user) { toast('Sign in again to buy a plan', 'bad'); return; }
+  let P;
+  try { P = await loadPaddle(); } catch (e) { toast(e.message, 'bad'); return; }
+  // The checkout sits outside our dialogs; an open modal dialog would cover it and block its clicks.
+  ['planDlg', 'upgradeDlg'].forEach(id => { if ($(id).open) $(id).close(); });
+  buying = { plan, done: false };
+  P.Checkout.open({
+    items: [{ priceId: paddleCfg().prices[plan], quantity: 1 }],
+    customer: { email: user.email },
+    customData: { email: user.email, user_id: user.id },   // the webhook grants the plan to this account
+  });
+}
+
+function paddleEvent(ev) {
+  if (!ev || !buying) return;
+  if (ev.name === 'checkout.completed' && !buying.done) { buying.done = true; waitForPlan(buying.plan); }
+  if (ev.name === 'checkout.closed' && !buying.done) buying = null;
+}
+
+/** Payment done: the webhook usually grants the plan within seconds. Show it as soon as it arrives. */
+async function waitForPlan(plan) {
+  toast(`Thank you. Turning on ${PLAN_NAMES[plan]}…`, 'ok');
+  for (let i = 0; i < 24; i++) {
+    await new Promise(r => setTimeout(r, i < 6 ? 2500 : 5000));
+    await refreshLicense();
+    if ((PLAN_RANK[license.plan] || 0) >= PLAN_RANK[plan]) {
+      buying = null;
+      toast(`${PLAN_NAMES[license.plan]} is on. Thank you!`, 'ok');
+      $('planBtn').click();
+      return;
+    }
+  }
+  buying = null;
+  toast('Your order went through, but the plan has not arrived yet. It can take a few minutes: check My plan later, or use Talk to us.', 'bad');
+}
+
+async function openQuote(plan) {
+  if (!(AGENT.supabase && AGENT.supabase())) return;
+  ['planDlg', 'upgradeDlg'].forEach(id => { if ($(id).open) $(id).close(); });
+  const user = await signedInUser();
+  $('quoteEmail').textContent = (user && user.email) || license.email || 'your account email';
+  $('quotePlan').value = plan || ((PLAN_RANK[license.plan] || 0) >= 1 ? 'enterprise' : 'team');
+  $('quoteMsg').className = 'fb-msg'; $('quoteMsg').textContent = '';
+  $('quoteSend').hidden = false; $('quoteCancel').textContent = 'Cancel';
+  $('quoteDlg').showModal();
+  $('quoteCompany').focus();
+}
+
+$('quoteForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const testers = $('quoteTesters').value ? Number($('quoteTesters').value) : null;
+  const row = { company: $('quoteCompany').value.trim(), plan: $('quotePlan').value, testers, message: $('quoteMessage').value.trim() || null };
+  if (row.company.length < 2) { $('quoteMsg').className = 'fb-msg bad'; $('quoteMsg').textContent = 'Enter your company or bank'; return; }
+  $('quoteSend').disabled = true;
+  $('quoteMsg').className = 'fb-msg'; $('quoteMsg').textContent = 'Sending…';
+  const { error } = await AGENT.supabase().from('sales_requests').insert(row);
+  $('quoteSend').disabled = false;
+  if (error) {
+    $('quoteMsg').className = 'fb-msg bad';
+    $('quoteMsg').textContent = fbTableMissing(error) ? 'Requests are not set up on this site yet.' : error.message;
+    return;
+  }
+  ['quoteCompany', 'quoteTesters', 'quoteMessage'].forEach(id => { $(id).value = ''; });
+  $('quoteMsg').className = 'fb-msg ok';
+  $('quoteMsg').textContent = `Sent. We'll reply to ${$('quoteEmail').textContent}.`;
+  $('quoteSend').hidden = true; $('quoteCancel').textContent = 'Close';
+});
+['quoteClose', 'quoteCancel'].forEach(id => $(id).addEventListener('click', () => $('quoteDlg').close()));
+$('planQuote').addEventListener('click', () => openQuote());
+$('planOffers').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-buy],[data-quote]');
+  if (b && b.dataset.buy) buy(b.dataset.buy);
+  else if (b) openQuote(b.dataset.quote);
+});
+$('upBuy').addEventListener('click', () => buy($('upBuy').dataset.plan));
+$('upQuote').addEventListener('click', () => openQuote($('upQuote').dataset.plan));
+
+$('planBtn').addEventListener('click', async () => {
+  $('planMsg').textContent = '';
+  renderPlanDialog();
+  $('planDlg').showModal();
+  await refreshLicense();
+  renderPlanDialog();
+});
+$('planClose').addEventListener('click', () => $('planDlg').close());
+$('planRefresh').addEventListener('click', async () => {
+  $('planMsg').className = 'fb-msg'; $('planMsg').textContent = 'checking…';
+  await refreshLicense();
+  $('planMsg').textContent = 'up to date';
+});
+$('planCodeForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const code = $('planCode').value.trim().toUpperCase();
+  const sb = AGENT.supabase && AGENT.supabase();
+  if (!code || !sb) return;
+  $('planMsg').className = 'fb-msg'; $('planMsg').textContent = 'checking the code…';
+  const { error } = await sb.rpc('redeem_code', { p_code: code });
+  if (error) { $('planMsg').className = 'fb-msg bad'; $('planMsg').textContent = error.message; return; }
+  await refreshLicense();
+  $('planCode').value = '';
+  $('planMsg').className = 'fb-msg ok';
+  $('planMsg').textContent = `Code accepted: ${PLAN_NAMES[license.plan] || license.plan}${license.expires ? ' until ' + license.expires : ''}`;
+  renderPlanDialog();
+});
+$('planTokenBtn').addEventListener('click', async () => {
+  const token = $('planToken').value.trim();
+  if (!token) return;
+  try {
+    license = await targetsApi('/api/license', { token });
+    $('planToken').value = '';
+    $('planMsg').className = 'fb-msg ok'; $('planMsg').textContent = 'Licence accepted';
+    renderPlan(); renderPlanDialog();
+  } catch (err) { $('planMsg').className = 'fb-msg bad'; $('planMsg').textContent = err.message; }
+});
+['upClose', 'upOk'].forEach(id => $(id).addEventListener('click', () => $('upgradeDlg').close()));
+$('upPlan').addEventListener('click', () => { $('upgradeDlg').close(); $('planBtn').click(); });
+
+// ---------- Access (admins, on the website): plan grants and invite codes ----------
+const acc = { grants: [], codes: [], redeemed: [], sales: [], payments: [], tab: 'grants' };
+const siteUrl = () => location.origin + location.pathname;
+const dayEnd = (d) => new Date(d + 'T23:59:59').toISOString();
+// Shown in the viewer's own time zone: "until 25 Dec" means the end of 25 Dec where you are.
+const dayOf = (iso) => { const d = new Date(iso); if (!iso || isNaN(d)) return ''; const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+const inDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+function newCode() {
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // no 0/O/1/I to misread
+  const r = crypto.getRandomValues(new Uint8Array(8));
+  const part = (i) => Array.from(r.slice(i, i + 4), (x) => abc[x % abc.length]).join('');
+  return `SP-${part(0)}-${part(4)}`;
+}
+function accMsg(text, kind) { $('accMsg').className = 'fb-msg ' + (kind || ''); $('accMsg').textContent = text || ''; }
+
+/** quiet: just refresh the counts on the Access button (on start, for admins). */
+async function accLoad(quiet) {
+  const sb = AGENT.supabase && AGENT.supabase();
+  if (!sb) return;
+  if (!quiet) accMsg('Loading…');
+  const [g, c, r, s, p] = await Promise.all([
+    sb.from('license_grants').select('*').order('created_at', { ascending: false }),
+    sb.from('license_codes').select('*').order('created_at', { ascending: false }),
+    sb.rpc('admin_redemptions'),
+    sb.from('sales_requests').select('*').order('created_at', { ascending: false }).limit(500),
+    sb.from('license_purchases').select('*').order('created_at', { ascending: false }).limit(200),
+  ]);
+  const err = g.error || c.error || r.error || s.error || p.error;
+  if (err) { if (!quiet) accMsg(fbTableMissing(err) ? 'Plans are not set up yet: run tools/supabase-licensing.sql in Supabase.' : err.message, 'bad'); return; }
+  acc.grants = g.data || []; acc.codes = c.data || []; acc.redeemed = r.data || [];
+  acc.sales = s.data || []; acc.payments = p.data || [];
+  if (!quiet) accMsg('');
+  accRender();
+}
+
+/** Plans ending in the next 30 days or ended in the last 30: grants, and invite-code trials nobody has replaced. */
+function renewals() {
+  const now = Date.now(), win = 30 * 86400e3;
+  const near = (iso) => { const t = Date.parse(iso); return t > now - win && t < now + win; };
+  const covered = (email, after) => acc.grants.some(g => Date.parse(g.expires_at) > Date.parse(after)
+    && (g.kind === 'email' ? g.value === email : email.endsWith('@' + g.value)));
+  const codePlan = (code) => { const k = acc.codes.find(x => x.code === code); return k ? k.plan : 'team'; };
+  const rows = [];
+  for (const g of acc.grants) {
+    if (!near(g.expires_at)) continue;
+    const sub = g.origin === 'card' && /\bsub_/.test(g.note || '');
+    rows.push({ kind: 'grant', id: g.id, who: (g.kind === 'domain' ? 'Everyone @' : '') + g.value, email: g.kind === 'email' ? g.value : null,
+      plan: g.plan, ends: g.expires_at, card: g.origin === 'card', auto: sub,
+      how: sub ? 'Card subscription: renews by itself' : g.origin === 'card' ? 'Paid by card, one payment' : 'Your grant' + (g.note ? ` (${g.note})` : '') });
+  }
+  for (const r of acc.redeemed) {
+    if (!r.email || !near(r.expires_at) || covered(r.email, r.expires_at)) continue;
+    rows.push({ kind: 'code', who: r.email, email: r.email, plan: codePlan(r.code), ends: r.expires_at, how: 'Invite code ' + r.code });
+  }
+  return rows.sort((a, b) => Date.parse(a.ends) - Date.parse(b.ends));
+}
+const needsReminder = (x) => !x.auto && Date.parse(x.ends) > Date.now();
+function whenText(iso) {
+  const d = Math.round((Date.parse(iso) - Date.now()) / 86400e3);
+  return d > 1 ? `in ${d} days` : d === 1 ? 'tomorrow' : d === 0 ? 'today' : d === -1 ? 'yesterday' : `${-d} days ago`;
+}
+function reminderText(x) {
+  const plan = PLAN_NAMES[x.plan] || x.plan, day = dayOf(x.ends), ended = Date.parse(x.ends) <= Date.now();
+  const what = x.kind === 'code' ? `SwitchProof ${plan} trial` : `SwitchProof ${plan} plan`;
+  const keep = canBuy(x.plan)
+    ? `sign in at ${siteUrl()}, click the plan badge (top right) and buy ${plan} by card, or reply to this email for an invoice.`
+    : `reply to this email and we'll send you an invoice.`;
+  return ended ? `Hi,\n\nYour ${what} ended on ${day}, so SwitchProof is back on Free. To turn ${plan} on again, ${keep}\n\nThank you for using SwitchProof.`
+    : `Hi,\n\nYour ${what} ends on ${day}. To keep it, ${keep}\n\nThank you for using SwitchProof.`;
+}
+function money(amount, ccy) {
+  if (amount == null || !ccy) return '';
+  try {
+    const f = new Intl.NumberFormat(undefined, { style: 'currency', currency: ccy });
+    return f.format(Number(amount) / Math.pow(10, f.resolvedOptions().maximumFractionDigits));   // Paddle sends minor units
+  } catch (e) { return `${amount} ${ccy}`; }
+}
+const mailto = (email, subject, body) => `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+function accBadge() {
+  const fresh = acc.sales.filter(s => s.status === 'new').length;
+  const soon = renewals().filter(x => needsReminder(x) && Date.parse(x.ends) < Date.now() + 7 * 86400e3).length;
+  const n = fresh + soon;
+  $('accBadge').hidden = !n;
+  $('accBadge').textContent = n;
+  const why = [fresh && `${fresh} new sales request${fresh === 1 ? '' : 's'}`, soon && `${soon} plan${soon === 1 ? '' : 's'} ending this week`].filter(Boolean);
+  $('accessOpen').title = why.length ? why.join(' · ') : 'Grant plans and make invite codes';
+  acctDot();
+}
+
+/** Prefill the grant form, e.g. after an invoice is paid. */
+function grantFor(email, plan) {
+  accTabs('grants');
+  $('grantKind').value = 'email'; $('grantKind').dispatchEvent(new Event('change'));
+  $('grantValue').value = email;
+  $('grantPlan').value = plan === 'enterprise' ? 'enterprise' : 'team';
+  $('grantUntil').value = inDays(365);
+  $('grantNote').value = 'Invoice';
+  $('grantNote').focus();
+  accMsg('Check the dates and note, then Save grant', 'ok');
+}
+
+function accTabs(tab) {
+  acc.tab = tab;
+  document.querySelectorAll('[data-acc-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.accTab === tab)));
+  document.querySelectorAll('[data-acc-pane]').forEach(p => { p.hidden = p.dataset.accPane !== tab; });
+}
+
+function accRender() {
+  const now = Date.now();
+  $('grantList').innerHTML = acc.grants.length ? acc.grants.map(g => {
+    const live = Date.parse(g.expires_at) > now;
+    return `<tr class="${live ? '' : 'row-muted'}" data-id="${g.id}">
+      <td>${g.kind === 'domain' ? 'Everyone @' : ''}${escapeHtml(g.value)}</td>
+      <td>${escapeHtml(PLAN_NAMES[g.plan] || g.plan)}</td>
+      <td class="mono">${escapeHtml(dayOf(g.expires_at))}${live ? '' : ' <span class="muted">ended</span>'}</td>
+      <td>${escapeHtml(g.note || '')}</td>
+      <td class="acc-actions">
+        <button type="button" class="link-btn" data-acc="copy-grant">Copy message</button>
+        ${g.kind === 'email' ? '<button type="button" class="link-btn" data-acc="invite">Send invite email</button>' : ''}
+        <button type="button" class="link-btn danger" data-acc="del-grant">Remove</button>
+      </td></tr>`;
+  }).join('') : '<tr><td colspan="5" class="muted">No grants yet.</td></tr>';
+
+  const used = {};
+  for (const r of acc.redeemed) used[r.code] = (used[r.code] || 0) + 1;
+  $('codeList').innerHTML = acc.codes.length ? acc.codes.map(k => {
+    const live = Date.parse(k.valid_until) > now && (used[k.code] || 0) < k.max_uses;
+    return `<tr class="${live ? '' : 'row-muted'}" data-code="${escapeHtml(k.code)}">
+      <td class="mono">${escapeHtml(k.code)}</td>
+      <td>${escapeHtml(PLAN_NAMES[k.plan] || k.plan)}</td>
+      <td class="num">${k.days}</td>
+      <td class="num">${used[k.code] || 0} / ${k.max_uses}</td>
+      <td class="mono">${escapeHtml(dayOf(k.valid_until))}${live ? '' : ' <span class="muted">closed</span>'}</td>
+      <td>${escapeHtml(k.note || '')}</td>
+      <td class="acc-actions">
+        <button type="button" class="link-btn" data-acc="copy-code">Copy message</button>
+        ${live ? '<button type="button" class="link-btn" data-acc="end-code">End now</button>' : ''}
+        <button type="button" class="link-btn danger" data-acc="del-code">Delete</button>
+      </td></tr>`;
+  }).join('') : '<tr><td colspan="7" class="muted">No codes yet.</td></tr>';
+
+  $('redeemList').innerHTML = acc.redeemed.length ? acc.redeemed.map(r => `<tr data-code="${escapeHtml(r.code)}" data-user="${escapeHtml(r.user_id)}">
+      <td class="mono">${escapeHtml(r.code)}</td><td>${escapeHtml(r.email || '')}</td>
+      <td class="mono">${escapeHtml(dayOf(r.redeemed_at))}</td><td class="mono">${escapeHtml(dayOf(r.expires_at))}</td>
+      <td class="acc-actions"><button type="button" class="link-btn danger" data-acc="del-redeem" title="Ends this person's plan from this code">Remove</button></td></tr>`).join('')
+    : '<tr><td colspan="5" class="muted">Nobody has redeemed a code yet.</td></tr>';
+
+  const ren = renewals();
+  acc.renewals = ren;
+  $('renewCount').textContent = ren.filter(needsReminder).length || '';
+  $('renewList').innerHTML = ren.length ? ren.map((x, i) => {
+    const ended = Date.parse(x.ends) <= now;
+    const subj = `Your SwitchProof ${PLAN_NAMES[x.plan]} ${x.kind === 'code' ? 'trial' : 'plan'} ${ended ? 'has ended' : 'ends ' + dayOf(x.ends)}`;
+    return `<tr class="${ended || x.auto ? 'row-muted' : ''}" data-i="${i}">
+      <td>${escapeHtml(x.who)}</td>
+      <td>${escapeHtml(PLAN_NAMES[x.plan] || x.plan)}</td>
+      <td><span class="mono">${escapeHtml(dayOf(x.ends))}</span> <span class="${ended ? 'muted' : Date.parse(x.ends) < now + 7 * 86400e3 ? 'warn-t' : 'muted'}">${whenText(x.ends)}</span></td>
+      <td class="wrap">${escapeHtml(x.how)}</td>
+      <td class="acc-actions">
+        ${x.email && !x.auto ? `<a class="link-btn" href="${escapeHtml(mailto(x.email, subj, reminderText(x)))}">Email</a>
+          <button type="button" class="link-btn" data-acc="copy-reminder" title="Copy the reminder text">Copy</button>` : ''}
+        ${x.kind === 'grant' && !x.card ? '<button type="button" class="link-btn" data-acc="extend">Extend 1 year</button>' : ''}
+        ${x.kind === 'code' ? '<button type="button" class="link-btn" data-acc="grant-for" title="Give this email a plan, e.g. once their invoice is paid">Grant</button>' : ''}
+      </td></tr>`;
+  }).join('') : '<tr><td colspan="5" class="muted">No plans end in the next 30 days.</td></tr>';
+
+  const fresh = acc.sales.filter(s => s.status === 'new').length;
+  $('salesCount').textContent = fresh || '';
+  const STATUS = { new: 'New', contacted: 'Contacted', won: 'Won', lost: 'Lost' };
+  $('salesList').innerHTML = acc.sales.length ? acc.sales.map(s => `<tr class="${s.status === 'won' || s.status === 'lost' ? 'row-muted' : ''}" data-id="${s.id}">
+      <td class="mono">${escapeHtml(dayOf(s.created_at))}</td>
+      <td><strong>${escapeHtml(s.company)}</strong><br><span class="muted">${escapeHtml(s.email || '')}</span></td>
+      <td>${escapeHtml(PLAN_NAMES[s.plan] || 'Not sure')}</td>
+      <td class="num">${s.testers || ''}</td>
+      <td class="sales-msg">${escapeHtml(s.message || '')}</td>
+      <td><select class="sales-status" data-acc="status" aria-label="Status">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${k === s.status ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
+      <td class="acc-actions">
+        ${s.email ? `<a class="link-btn" href="${escapeHtml(mailto(s.email, 'SwitchProof ' + (PLAN_NAMES[s.plan] || 'plans') + ' for ' + s.company, 'Hi,\n\nThank you for asking about SwitchProof.\n\n'))}">Reply</a>
+          <button type="button" class="link-btn" data-acc="grant-sale" title="Give this email a plan, e.g. once their invoice is paid">Grant</button>` : ''}
+      </td></tr>`).join('')
+    : '<tr><td colspan="7" class="muted">No requests yet. They arrive from "Talk to us" in My plan.</td></tr>';
+
+  $('payList').innerHTML = acc.payments.length ? acc.payments.map(p => `<tr>
+      <td class="mono">${escapeHtml(dayOf(p.created_at))}</td>
+      <td>${escapeHtml(p.email || '')}</td>
+      <td>${escapeHtml(PLAN_NAMES[p.plan] || p.plan || '')}</td>
+      <td class="num">${escapeHtml(money(p.amount, p.currency))}</td>
+      <td class="mono">${escapeHtml(dayOf(p.paid_until))}</td>
+      <td class="wrap">${escapeHtml(p.outcome || '')}</td></tr>`).join('')
+    : `<tr><td colspan="6" class="muted">${paddleCfg() ? 'No card payments yet.' : 'Card checkout is off: build the site with -PaddleToken to turn it on.'}</td></tr>`;
+  accBadge();
+}
+
+function inviteText(kind, v) {
+  if (kind === 'email') return `You have SwitchProof ${PLAN_NAMES[v.plan]} until ${dayOf(v.expires_at)}.\n\n1. Go to ${siteUrl()}\n2. Create an account (or sign in) with ${v.value}\n3. Download SwitchProof for Windows from the site and open it.`;
+  if (kind === 'domain') return `Everyone with an @${v.value} email address has SwitchProof ${PLAN_NAMES[v.plan]} until ${dayOf(v.expires_at)}.\n\nSign up at ${siteUrl()} with your work email, then download SwitchProof for Windows from the site.`;
+  return `Your SwitchProof invite code: ${v.code} (${PLAN_NAMES[v.plan]} for ${v.days} days).\n\n1. Go to ${siteUrl()} and create an account\n2. Click the plan badge (top right) and enter the code\n3. Download SwitchProof for Windows from the site and open it.`;
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); toast('Copied: paste it into an email or chat', 'ok'); }
+  catch (e) { prompt('Copy this message:', text); }
+}
+
+$('accessOpen').addEventListener('click', async () => {
+  $('grantUntil').value = inDays(90);
+  $('codeUntil').value = inDays(30);
+  $('codeValue').value = newCode();
+  accTabs(acc.tab);
+  $('accessDlg').showModal();
+  await accLoad();
+});
+$('accClose').addEventListener('click', () => $('accessDlg').close());
+document.querySelector('#accessDlg .fb-tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-acc-tab]'); if (b) accTabs(b.dataset.accTab); });
+$('grantKind').addEventListener('change', () => {
+  const dom = $('grantKind').value === 'domain';
+  $('grantValueLabel').textContent = dom ? 'Domain' : 'Email';
+  $('grantValue').placeholder = dom ? 'yourbank.com' : 'name@example.com';
+});
+
+$('grantForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const kind = $('grantKind').value;
+  const value = $('grantValue').value.trim().toLowerCase().replace(/^@/, '');
+  if (kind === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) { accMsg('Enter an email address', 'bad'); return; }
+  if (kind === 'domain' && !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(value)) { accMsg('Enter a domain like yourbank.com', 'bad'); return; }
+  const row = { kind, value, plan: $('grantPlan').value, expires_at: dayEnd($('grantUntil').value), note: $('grantNote').value.trim() || null };
+  const { error } = await AGENT.supabase().from('license_grants').upsert(row, { onConflict: 'kind,value' });
+  if (error) { accMsg(error.message, 'bad'); return; }
+  $('grantValue').value = ''; $('grantNote').value = '';
+  await accLoad();
+  accMsg(`Saved: ${kind === 'domain' ? 'everyone @' : ''}${value} has ${PLAN_NAMES[row.plan]} until ${dayOf(row.expires_at)}`, 'ok');
+});
+
+$('codeForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const row = { code: $('codeValue').value.trim().toUpperCase(), plan: $('codePlan').value, days: Number($('codeDays').value),
+    max_uses: Number($('codeUses').value), valid_until: dayEnd($('codeUntil').value), note: $('codeNote').value.trim() || null };
+  if (!/^[A-Z0-9-]{6,32}$/.test(row.code)) { accMsg('Codes use letters, digits and dashes (6-32 characters)', 'bad'); return; }
+  const { error } = await AGENT.supabase().from('license_codes').insert(row);
+  if (error) { accMsg(/duplicate|unique/i.test(error.message) ? 'That code already exists' : error.message, 'bad'); return; }
+  $('codeValue').value = newCode(); $('codeNote').value = '';
+  await accLoad();
+  accMsg(`Created ${row.code}: copy its message to share it`, 'ok');
+});
+
+document.querySelector('#accessDlg').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-acc]');
+  if (!b) return;
+  const sb = AGENT.supabase();
+  const tr = b.closest('tr');
+  const act = b.dataset.acc;
+  let res;
+  if (act === 'status') return;   // handled on change
+  if (act === 'copy-reminder') return copyText(reminderText(acc.renewals[Number(tr.dataset.i)]));
+  if (act === 'grant-for') { const x = acc.renewals[Number(tr.dataset.i)]; return grantFor(x.email, x.plan); }
+  if (act === 'grant-sale') { const s = acc.sales.find(x => String(x.id) === tr.dataset.id); return grantFor(s.email, s.plan); }
+  if (act === 'extend') {
+    const x = acc.renewals[Number(tr.dataset.i)];
+    const until = new Date(Math.max(Date.parse(x.ends), Date.now()) + 365 * 86400e3).toISOString();
+    if (!confirm(`Extend ${x.who} (${PLAN_NAMES[x.plan]}) to ${dayOf(until)}?`)) return;
+    res = await sb.from('license_grants').update({ expires_at: until }).eq('id', x.id);
+    if (!res.error) { await accLoad(); accMsg(`${x.who} now has ${PLAN_NAMES[x.plan]} until ${dayOf(until)}`, 'ok'); return; }
+  }
+  if (act === 'copy-grant') { const g = acc.grants.find(x => String(x.id) === tr.dataset.id); return copyText(inviteText(g.kind, g)); }
+  if (act === 'copy-code') { const k = acc.codes.find(x => x.code === tr.dataset.code); return copyText(inviteText('code', k)); }
+  if (act === 'invite') {
+    const g = acc.grants.find(x => String(x.id) === tr.dataset.id);
+    accMsg('Sending…');
+    const { data, error } = await sb.functions.invoke('admin-invite', { body: { email: g.value } });
+    if (error || (data && data.error)) accMsg('Invite email not sent: ' + ((data && data.error) || error.message) + '. You can copy the message instead.', 'bad');
+    else accMsg('Invite email sent to ' + g.value, 'ok');
+    return;
+  }
+  if (act === 'del-grant') { if (!confirm('Remove this grant? They go back to Free (or another grant or code).')) return; res = await sb.from('license_grants').delete().eq('id', Number(tr.dataset.id)); }
+  if (act === 'end-code') res = await sb.from('license_codes').update({ valid_until: new Date().toISOString() }).eq('code', tr.dataset.code);
+  if (act === 'del-code') { if (!confirm('Delete this code? Everyone who redeemed it loses the plan it gave them.')) return; res = await sb.from('license_codes').delete().eq('code', tr.dataset.code); }
+  if (act === 'del-redeem') { if (!confirm('Remove this redemption? That person goes back to Free (or another grant).')) return; res = await sb.from('license_redemptions').delete().eq('code', tr.dataset.code).eq('user_id', tr.dataset.user); }
+  if (res && res.error) { accMsg(res.error.message, 'bad'); return; }
+  await accLoad();
+});
+document.querySelector('#accessDlg').addEventListener('change', async (e) => {
+  const sel = e.target.closest('select[data-acc="status"]');
+  if (!sel) return;
+  const id = Number(sel.closest('tr').dataset.id);
+  const { error } = await AGENT.supabase().from('sales_requests').update({ status: sel.value }).eq('id', id);
+  if (error) { accMsg(error.message, 'bad'); return; }
+  const s = acc.sales.find(x => x.id === id);
+  if (s) s.status = sel.value;
+  accRender();
+});
+
 // ---------- Init ----------
 setMode(mode);
 // Hosted: wait until signed in and connected to the user's agent.
 AGENT.ready.then(() => {
+  refreshLicense();
+  setInterval(refreshLicense, 6 * 60 * 60 * 1000);   // a plan that ends or is revoked shows up within hours
   showView(store.get('view', 'load'));
   if (uatRunId) openRun(uatRunId);
   loadTargets();

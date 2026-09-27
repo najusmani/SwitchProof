@@ -7,17 +7,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260927101327">
+<link rel="stylesheet" href="style.css?v=20260927114130">
 </head>
 <body>
 
 <header class="topbar">
-  <div class="brand">
+  <div class="brand" title="ISO 8583 load, function &amp; UAT console">
     <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="2"/><path d="M6 15.5l3.5-6 3 4.5 2.2-3.2L18 15.5"/></svg>
-    <div>
-      <div class="brand-name">SwitchProof</div>
-      <div class="brand-sub">ISO 8583 load, function &amp; UAT console</div>
-    </div>
+    <div class="brand-name">SwitchProof</div>
   </div>
 
   <nav class="views" role="tablist" aria-label="Workspace">
@@ -27,12 +24,11 @@
 
   <div class="target-wrap">
     <button class="target" id="targetBtn" type="button" aria-haspopup="dialog" aria-expanded="false">
-      <span class="target-label">Target</span>
+      <span class="conn" id="conn"><span class="conn-dot"></span><span class="sr-only" id="connText">Connecting…</span></span>
       <span class="target-name" id="targetName">—</span>
       <span class="target-value mono" id="targetAddr"></span><span class="target-fmt" id="targetFmt"></span>
       <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
     </button>
-    <span class="conn" id="conn" title="Local console server"><span class="conn-dot"></span><span id="connText">Connecting…</span></span>
 
     <div class="target-pop" id="targetPop" role="dialog" aria-label="Switch targets" hidden>
       <div class="pop-head">
@@ -46,7 +42,7 @@
         <input type="hidden" id="tfId">
         <div class="tf-grid">
           <label class="field"><span>Name</span><input type="text" id="tfName" placeholder="SIT FEPI"></label>
-          <label class="field"><span>IP / host</span><input type="text" id="tfHost" class="mono" placeholder="192.168.1.11" required></label>
+          <label class="field"><span>IP / host</span><input type="text" id="tfHost" class="mono" placeholder="192.168.10.20" required></label>
           <label class="field"><span>Port</span><input type="number" id="tfPort" placeholder="2100" min="1" max="65535" required></label>
         </div>
         <label class="field"><span>Message format <em>ISO 8583 version and field layout the switch speaks</em></span><select id="tfProfile"></select></label>
@@ -60,11 +56,21 @@
     </div>
   </div>
 
-  <div class="user-menu hosted-only">
-    <span class="user-email" id="userEmail"></span>
-    <button type="button" class="btn sm ghost-plain fb-open" id="fbOpen" title="Request a feature or report a problem">Feedback<span class="fb-badge" id="fbBadge" hidden></span></button>
-    <button type="button" class="btn sm ghost-plain" id="agentDisconnect" title="Forget the pairing with this agent">Disconnect agent</button>
-    <button type="button" class="btn sm ghost-plain" data-signout>Sign out</button>
+  <button type="button" class="plan-badge p-free" id="planBtn" title="Your plan">Free</button>
+
+  <div class="acct hosted-only">
+    <button type="button" class="acct-btn" id="acctBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="acctMenu" title="Account">
+      <span class="acct-avatar" id="acctAvatar" aria-hidden="true"></span><span class="sr-only">Account</span>
+      <span class="acct-dot" id="acctDot" hidden></span>
+    </button>
+    <div class="acct-menu" id="acctMenu" role="menu" aria-label="Account" hidden>
+      <div class="acct-head"><span class="acct-label">Signed in as</span><span class="user-email" id="userEmail"></span></div>
+      <button type="button" role="menuitem" class="acct-item" id="fbOpen" title="Request a feature or report a problem">Feedback<span class="fb-badge" id="fbBadge" hidden></span></button>
+      <button type="button" role="menuitem" class="acct-item" id="accessOpen" hidden title="Grant plans and make invite codes">Access<span class="fb-badge" id="accBadge" hidden></span></button>
+      <div class="acct-sep" role="separator"></div>
+      <button type="button" role="menuitem" class="acct-item" id="agentDisconnect" title="Forget the pairing with this agent">Disconnect agent</button>
+      <button type="button" role="menuitem" class="acct-item" data-signout>Sign out</button>
+    </div>
   </div>
 
   <button class="icon-btn" id="themeBtn" title="Toggle light / dark" aria-label="Toggle theme">
@@ -89,6 +95,7 @@
         </div>
       </div>
       <p class="hint bundle-only" hidden>A bundle mixes several transaction types in one run, in the shares you set. Click types to add or remove them.</p>
+      <p class="plan-hint" id="bundleLock" hidden>Bundles are part of the Team plan: you can set one up here, but running it needs Team.</p>
       <div class="type-grid" id="typeGrid" role="radiogroup" aria-label="Transaction type"></div>
       <div class="bundle" id="bundleBox" hidden>
         <div class="bundle-presets">
@@ -157,6 +164,7 @@
         <span class="step">03</span>
         <h2>Load profile</h2>
         <span class="tps" id="tpsHint">≈ 2 tx/s</span>
+        <span class="plan-hint" id="freeLimits" hidden></span>
       </div>
       <div class="field-row three">
         <label class="field">
@@ -189,7 +197,7 @@
       <p class="hint">Amount and currency are used when a row leaves them blank. Terminal, institutions, currency and card are <b>saved per target</b> (<span id="defaultsTarget">—</span>), so switching target loads that switch's own setup. UAT runs use them too.</p>
       <div class="field-row two">
         <label class="field"><span>Default amount</span><input type="number" id="amount" value="10.00" step="0.01"></label>
-        <label class="field"><span>Default currency</span><input type="text" id="currencyCode" value="951"></label>
+        <label class="field"><span>Default currency</span><input type="text" id="currencyCode" value="840"></label>
       </div>
       <div class="saved-note" id="defaultsSaved" aria-live="polite"></div>
       <div class="field-row three">
@@ -285,10 +293,16 @@
       <div class="card-head">
         <h2>Recent transactions</h2>
         <span class="summary-hint">newest first · up to 200</span>
+        <span class="money-actions">
+          <a class="btn sm ghost-plain" id="switchReportBtn" target="_blank" rel="noopener" hidden title="Every request and response of this run, field by field">Switch report</a>
+          <button type="button" class="link-btn" id="moneyTrailBtn" hidden>Money trail</button>
+          <button type="button" class="btn sm ghost-plain" id="moneyCheckBtn" hidden title="Look up what each transaction did in the core system">Check money side</button>
+        </span>
       </div>
+      <div class="money-sum" id="moneySum" hidden></div>
       <div class="table-wrap tall">
-        <table class="tbl">
-          <thead><tr><th>#</th><th>Type</th><th>RRN</th><th>From</th><th>To</th><th class="num">Amount</th><th>Ccy</th><th>Result</th><th class="num">ms</th></tr></thead>
+        <table class="tbl" id="resultsTable">
+          <thead><tr><th>#</th><th>Type</th><th>RRN</th><th>From</th><th>To</th><th class="num">Amount</th><th>Ccy</th><th>Result</th><th class="num">ms</th><th class="money-col">Money</th></tr></thead>
           <tbody id="resultsTableBody"><tr><td colspan="9" class="muted small">Nothing sent yet</td></tr></tbody>
         </table>
       </div>
@@ -301,6 +315,7 @@
     <h2>Open transactions</h2>
     <span id="authCount" class="pill neutral">0 open</span>
     <p class="hint inline">Approved financial transactions land here. <b>Settle</b> sends a completion (0220) for an authorization; <b>Reverse</b> sends a reversal (0400) with the original RRN. Select rows to settle or reverse many at once.</p>
+    <button type="button" class="link-btn" id="otTrailBtn" hidden>Money trail</button>
     <button id="refreshAuthBtn" class="link-btn" type="button">
       <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 11V5m0 6h-6"/></svg>
       Refresh
@@ -389,6 +404,7 @@
       </details>
       <div class="fire-bar flat">
         <div class="fire-summary" id="uatSummary">Select cases on the left.</div>
+        <span class="plan-hint" id="uatLimit" hidden></span>
         <button class="btn primary" id="uatRunBtn" type="button" disabled>
           <svg viewBox="0 0 24 24"><path d="M7 4l12 8-12 8z"/></svg>
           Run selected
@@ -410,6 +426,7 @@
         <a class="btn sm ghost-plain" id="uatReportBtn" target="_blank" rel="noopener">Open report (print to PDF)</a>
         <a class="btn sm ghost-plain" id="uatCsvBtn">Evidence CSV</a>
         <a class="btn sm ghost-plain" id="uatBankBtn" title="One row per case in the bank's test-sheet columns">Bank sheet CSV</a>
+        <button type="button" class="btn sm ghost-plain" id="uatMoneyRecheck" hidden title="FLEXCUBE can post minutes after the switch approves: look again now">Check money again</button>
       </div>
       <div id="uatResults" class="uat-results"></div>
     </div>
@@ -489,9 +506,9 @@
           <li class="in"><span class="t">09:41:02.161</span><span class="d">&larr;</span><span class="m">0810</span><span class="x">Network management</span><span class="r ok">00</span></li>
           <li><span class="t">09:41:02.402</span><span class="d">&rarr;</span><span class="m">0200</span><span class="x">310000 Balance inquiry</span><span class="r"></span></li>
           <li class="in"><span class="t">09:41:02.440</span><span class="d">&larr;</span><span class="m">0210</span><span class="x">Approved &middot; 38&nbsp;ms</span><span class="r ok">00</span></li>
-          <li><span class="t">09:41:03.015</span><span class="d">&rarr;</span><span class="m">0100</span><span class="x">000000 Purchase &middot; 25.00 XCD</span><span class="r"></span></li>
+          <li><span class="t">09:41:03.015</span><span class="d">&rarr;</span><span class="m">0100</span><span class="x">000000 Purchase &middot; 25.00 USD</span><span class="r"></span></li>
           <li class="in"><span class="t">09:41:03.061</span><span class="d">&larr;</span><span class="m">0110</span><span class="x">Approved &middot; auth 731045</span><span class="r ok">00</span></li>
-          <li><span class="t">09:41:03.580</span><span class="d">&rarr;</span><span class="m">0220</span><span class="x">Settlement &middot; 25.00 XCD</span><span class="r"></span></li>
+          <li><span class="t">09:41:03.580</span><span class="d">&rarr;</span><span class="m">0220</span><span class="x">Settlement &middot; 25.00 USD</span><span class="r"></span></li>
           <li class="in"><span class="t">09:41:03.627</span><span class="d">&larr;</span><span class="m">0230</span><span class="x">Posted</span><span class="r ok">00</span></li>
           <li><span class="t">09:41:04.210</span><span class="d">&rarr;</span><span class="m">0200</span><span class="x">010000 Withdrawal &middot; above balance</span><span class="r"></span></li>
           <li class="in"><span class="t">09:41:04.252</span><span class="d">&larr;</span><span class="m">0210</span><span class="x">Insufficient funds</span><span class="r warn">51 <em>pass</em></span></li>
@@ -532,6 +549,7 @@
         <p class="gx-eyebrow">Set up</p>
         <h2>Connect your agent</h2>
         <p class="gx-note">The console runs in this browser. Messages to your switch are sent by SwitchProof for Windows on a PC inside your network.</p>
+        <p class="gx-note gx-note-upgrade"><b>Already installed SwitchProof?</b> Versions before 1.4 can't connect to switchproof.online. Download and run the installer below: it updates SwitchProof and keeps your targets, test cases and results.</p>
         <ol class="gx-steps">
           <li>
             <b>Download SwitchProof for Windows</b>
@@ -592,6 +610,208 @@
   </main>
 </div>
 
+<dialog class="fb-dlg money-dlg" id="dbDlg" aria-labelledby="dbTitle">
+  <div class="dlg-head">
+    <div>
+      <p class="fb-eyebrow">Money checks</p>
+      <h2 id="dbTitle">Bank database</h2>
+    </div>
+    <button type="button" class="t-btn" id="dbClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <p class="fb-lead">For each RRN, SwitchProof reads the switch log, the accounting entries and the amount blocks, and checks what the transaction really did to the money. It only reads (SELECT): use a read-only database user. These details stay on this PC.</p>
+  <form id="dbForm" autocomplete="off">
+    <div class="field-row three">
+      <label class="field"><span>Host</span><input type="text" id="dbHost" class="mono" placeholder="10.0.0.20" required></label>
+      <label class="field"><span>Port</span><input type="number" id="dbPort" value="1521" min="1" max="65535" required></label>
+      <label class="field"><span>Service name</span><input type="text" id="dbService" class="mono" placeholder="FCUBSUAT" required></label>
+    </div>
+    <div class="field-row three">
+      <label class="field"><span>Schema <em>table owner</em></span><input type="text" id="dbSchema" class="mono" placeholder="FCUBS"></label>
+      <label class="field"><span>User</span><input type="text" id="dbUser" class="mono" required autocomplete="off"></label>
+      <label class="field"><span>Password</span><input type="password" id="dbPass" autocomplete="new-password"></label>
+    </div>
+    <label class="field"><span>In UAT runs</span>
+      <select id="dbMode">
+        <option value="report">Check the money side and report problems (step results unchanged)</option>
+        <option value="enforce">Check the money side, and fail the step on a money problem</option>
+        <option value="off">Don't check</option>
+      </select>
+    </label>
+    <div class="db-driver-box">
+      <p class="db-driver" id="dbDriver"></p>
+      <div class="db-driver-edit" id="dbDriverEdit" hidden>
+        <label class="field"><span>Driver path <em>ojdbc8.jar or ojdbc11.jar, or the folder that holds it</em></span>
+          <span class="db-driver-row">
+            <input type="text" id="dbDriverPath" class="mono" spellcheck="false" autocomplete="off" placeholder="C:\app\client\you\product\19.0.0\client_1\jdbc\lib\ojdbc8.jar">
+            <button type="button" class="btn sm primary" id="dbDriverUse">Use this driver</button>
+          </span>
+        </label>
+        <p class="db-driver-hint">In File Explorer, hold Shift, right-click the file and choose <b>Copy as path</b>, then paste it here.</p>
+      </div>
+      <p class="fb-msg" id="dbDriverMsg"></p>
+    </div>
+    <div class="db-test" id="dbTest" hidden></div>
+    <div class="fb-actions">
+      <button type="button" class="link-btn danger" id="dbRemove" hidden>Remove</button>
+      <span class="fb-msg" id="dbMsg"></span>
+      <button type="button" class="btn ghost" id="dbTestBtn">Test connection</button>
+      <button type="submit" class="btn primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="fb-dlg money-dlg mt-dlg" id="mtDlg" aria-labelledby="mtTitle">
+  <div class="dlg-head">
+    <div>
+      <p class="fb-eyebrow">Money trail</p>
+      <h2 id="mtTitle">What did this transaction do?</h2>
+    </div>
+    <button type="button" class="t-btn" id="mtClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <form class="mt-form" id="mtForm" autocomplete="off">
+    <input type="text" id="mtRrn" class="mono" placeholder="RRN, e.g. 123456789012" maxlength="12" required aria-label="RRN">
+    <button type="submit" class="btn primary sm">Look up</button>
+    <span class="fb-msg" id="mtMsg"></span>
+  </form>
+  <div id="mtBody"></div>
+</dialog>
+
+<dialog class="fb-dlg plan-dlg" id="planDlg" aria-labelledby="planTitle">
+  <div class="dlg-head">
+    <div>
+      <p class="fb-eyebrow">Your plan</p>
+      <h2 id="planTitle">Free</h2>
+    </div>
+    <button type="button" class="t-btn" id="planClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <p class="plan-sub" id="planSub"></p>
+  <ul class="plan-features" id="planFeatures"></ul>
+  <div class="plan-buy" id="planBuy" hidden>
+    <div class="plan-offers" id="planOffers"></div>
+    <p class="plan-buy-foot"><button type="button" class="link-btn" id="planQuote">Talk to us</button> for an invoice, a bank transfer or a price for your whole team.</p>
+    <p class="plan-legal">Renews monthly until you cancel · <a href="refunds.html" target="_blank" rel="noopener">full refund within 14 days of your first payment</a> · <a href="terms.html" target="_blank" rel="noopener">Terms</a> · <a href="pricing.html" target="_blank" rel="noopener">Pricing</a></p>
+  </div>
+  <form class="plan-code" id="planCodeForm" autocomplete="off">
+    <label class="field"><span>Have an invite code?</span>
+      <span class="plan-code-row"><input type="text" id="planCode" class="mono" placeholder="SP-XXXX-XXXX" maxlength="32"><button type="submit" class="btn primary sm">Redeem</button></span>
+    </label>
+  </form>
+  <p class="plan-local" id="planLocal" hidden>Plans come with your SwitchProof account: sign in on the SwitchProof website and open SwitchProof from there to update your plan.</p>
+  <details class="plan-paste">
+    <summary>Paste a licence</summary>
+    <textarea id="planToken" rows="3" class="mono" spellcheck="false" placeholder="A licence you were sent for a PC without internet"></textarea>
+    <button type="button" class="btn sm ghost-plain" id="planTokenBtn">Use this licence</button>
+  </details>
+  <div class="fb-actions"><span class="fb-msg" id="planMsg"></span><button type="button" class="btn ghost" id="planRefresh">Refresh</button></div>
+</dialog>
+
+<dialog class="fb-dlg upgrade-dlg" id="upgradeDlg" aria-labelledby="upTitle">
+  <div class="dlg-head">
+    <div>
+      <p class="fb-eyebrow">Upgrade</p>
+      <h2 id="upTitle">Part of the Team plan</h2>
+    </div>
+    <button type="button" class="t-btn" id="upClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <p id="upText"></p>
+  <p class="plan-sub" id="upHow"></p>
+  <div class="fb-actions"><span></span>
+    <button type="button" class="btn ghost" id="upQuote" hidden>Talk to us</button>
+    <button type="button" class="btn ghost" id="upPlan">My plan</button>
+    <button type="button" class="btn primary" id="upBuy" hidden>Buy by card</button>
+    <button type="button" class="btn primary" id="upOk">OK</button>
+  </div>
+</dialog>
+
+<dialog class="fb-dlg quote-dlg" id="quoteDlg" aria-labelledby="quoteTitle">
+  <div class="dlg-head">
+    <div>
+      <p class="fb-eyebrow">Plans</p>
+      <h2 id="quoteTitle">Talk to us</h2>
+    </div>
+    <button type="button" class="t-btn" id="quoteClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <p class="plan-sub">For an invoice or bank transfer, a price for several testers, or a trial for your bank. We reply to <strong id="quoteEmail"></strong>.</p>
+  <form id="quoteForm" autocomplete="off">
+    <div class="field-row two">
+      <label class="field"><span>Company or bank</span><input type="text" id="quoteCompany" maxlength="120" required></label>
+      <label class="field"><span>Plan</span><select id="quotePlan"><option value="team">Team</option><option value="enterprise">Enterprise</option><option value="unsure">Not sure yet</option></select></label>
+    </div>
+    <label class="field"><span>How many testers <em>optional</em></span><input type="number" id="quoteTesters" min="1" max="10000" placeholder="e.g. 5"></label>
+    <label class="field"><span>Anything else <em>optional</em></span><textarea id="quoteMessage" rows="4" maxlength="2000" placeholder="How you'd like to pay, when you need it, which switch you test…"></textarea></label>
+    <div class="fb-actions"><span class="fb-msg" id="quoteMsg"></span><button type="button" class="btn ghost" id="quoteCancel">Cancel</button><button type="submit" class="btn primary" id="quoteSend">Send</button></div>
+  </form>
+</dialog>
+
+<dialog class="fb-dlg access-dlg" id="accessDlg" aria-labelledby="accTitle">
+  <div class="dlg-head">
+    <div>
+      <p class="fb-eyebrow">Admin</p>
+      <h2 id="accTitle">Access</h2>
+    </div>
+    <button type="button" class="t-btn" id="accClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="fb-tabs" role="tablist">
+    <button type="button" class="fb-tab" role="tab" data-acc-tab="grants" aria-selected="true">Grants</button>
+    <button type="button" class="fb-tab" role="tab" data-acc-tab="renewals" aria-selected="false">Renewals<span class="tab-count" id="renewCount"></span></button>
+    <button type="button" class="fb-tab" role="tab" data-acc-tab="sales" aria-selected="false">Sales<span class="tab-count" id="salesCount"></span></button>
+    <button type="button" class="fb-tab" role="tab" data-acc-tab="codes" aria-selected="false">Invite codes</button>
+    <button type="button" class="fb-tab" role="tab" data-acc-tab="redeemed" aria-selected="false">Redeemed</button>
+  </div>
+  <p class="fb-msg" id="accMsg"></p>
+
+  <section data-acc-pane="grants">
+    <p class="plan-sub">A grant gives a plan to one email address, or to everyone with an email at a domain (a pilot bank). It applies when they sign in with a confirmed email.</p>
+    <form class="acc-form" id="grantForm" autocomplete="off">
+      <div class="field-row three">
+        <label class="field"><span>Who</span><select id="grantKind"><option value="email">One email</option><option value="domain">Everyone at a domain</option></select></label>
+        <label class="field"><span id="grantValueLabel">Email</span><input type="text" id="grantValue" placeholder="name@example.com" required></label>
+        <label class="field"><span>Plan</span><select id="grantPlan"><option value="team">Team</option><option value="enterprise">Enterprise</option></select></label>
+      </div>
+      <div class="field-row three">
+        <label class="field"><span>Until</span><input type="date" id="grantUntil" required></label>
+        <label class="field"><span>Note <em>optional</em></span><input type="text" id="grantNote" maxlength="200" placeholder="Pilot, reviewer, partner…"></label>
+        <span class="acc-submit"><button type="submit" class="btn primary">Save grant</button></span>
+      </div>
+    </form>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>Who</th><th>Plan</th><th>Until</th><th>Note</th><th></th></tr></thead><tbody id="grantList"></tbody></table></div>
+  </section>
+
+  <section data-acc-pane="renewals" hidden>
+    <p class="plan-sub">Plans ending in the next 30 days, and those that ended in the last 30. Card plans renew by themselves; the others need a reminder.</p>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>Who</th><th>Plan</th><th>Ends</th><th>How they have it</th><th></th></tr></thead><tbody id="renewList"></tbody></table></div>
+  </section>
+
+  <section data-acc-pane="sales" hidden>
+    <h3 class="acc-h">Requests</h3>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>Sent</th><th>From</th><th>Plan</th><th class="num">Testers</th><th>Message</th><th>Status</th><th></th></tr></thead><tbody id="salesList"></tbody></table></div>
+    <h3 class="acc-h">Card payments</h3>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>When</th><th>Email</th><th>Plan</th><th class="num">Amount</th><th>Paid until</th><th>What happened</th></tr></thead><tbody id="payList"></tbody></table></div>
+  </section>
+
+  <section data-acc-pane="codes" hidden>
+    <p class="plan-sub">Anyone with a code can redeem it once, from My plan, until it's used up or its last day passes.</p>
+    <form class="acc-form" id="codeForm" autocomplete="off">
+      <div class="field-row three">
+        <label class="field"><span>Code</span><input type="text" id="codeValue" class="mono" required maxlength="32"></label>
+        <label class="field"><span>Plan</span><select id="codePlan"><option value="team">Team</option><option value="enterprise">Enterprise</option></select></label>
+        <label class="field"><span>Plan lasts <em>days after redeeming</em></span><input type="number" id="codeDays" value="30" min="1" max="3660" required></label>
+      </div>
+      <div class="field-row three">
+        <label class="field"><span>Uses</span><input type="number" id="codeUses" value="20" min="1" max="100000" required></label>
+        <label class="field"><span>Code works until</span><input type="date" id="codeUntil" required></label>
+        <label class="field"><span>Note <em>optional</em></span><input type="text" id="codeNote" maxlength="200" placeholder="LinkedIn demo, conference…"></label>
+      </div>
+      <div class="acc-submit"><button type="submit" class="btn primary">Create code</button></div>
+    </form>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Plan</th><th class="num">Days</th><th class="num">Used</th><th>Works until</th><th>Note</th><th></th></tr></thead><tbody id="codeList"></tbody></table></div>
+  </section>
+
+  <section data-acc-pane="redeemed" hidden>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Email</th><th>Redeemed</th><th>Plan ends</th><th></th></tr></thead><tbody id="redeemList"></tbody></table></div>
+  </section>
+</dialog>
+
 <dialog class="fb-dlg" id="fbDlg" aria-labelledby="fbTitle">
   <div class="dlg-head">
     <div>
@@ -637,8 +857,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20260925184022"></script>
-<script src="agent.js?v=20260925184022"></script>
-<script src="app.js?v=20260925184022"></script>
+<script src="config.js?v=20260927114130"></script>
+<script src="agent.js?v=20260927114130"></script>
+<script src="app.js?v=20260927114130"></script>
 </body>
 </html>

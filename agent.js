@@ -185,6 +185,7 @@ const AGENT = (() => {
       await connect();
     });
     document.querySelectorAll('[data-signout]').forEach(b => b.addEventListener('click', async () => {
+      try { await apiFetch('/api/license', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: null }) }); } catch (e) { /* agent not reachable */ }
       if (sb) await sb.auth.signOut();
       location.reload();
     }));
