@@ -1439,3 +1439,4 @@ body.doc-page { background: var(--bg); color: var(--text); min-height: 100vh; di
 .deal-close { flex: none; width: 28px; height: 28px; border: 0; background: transparent; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; border-radius: var(--radius-sm); }
 .deal-close:hover { color: var(--text); background: color-mix(in srgb, var(--ok) 12%, transparent); }
 @media (max-width: 640px) { .deal-bar { flex-wrap: wrap; padding: 9px 16px; } .deal-text { flex-basis: calc(100% - 40px); } }
+.cd-steps input.s-ofrrn { min-width: 118px; width: 118px; }

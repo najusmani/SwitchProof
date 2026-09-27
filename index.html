@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260927135715">
+<link rel="stylesheet" href="style.css?v=20260927150214">
 </head>
 <body>
 
@@ -470,11 +470,11 @@
 
     <div class="cd-steps-head">
       <b>Steps</b>
-      <span class="summary-hint">Settle / Reverse act on the latest approved step above them. Accounts can be <span class="mono">@ROLE</span>. Expect: <span class="mono">00</span>, a list <span class="mono">05,51</span>, or <span class="mono">!00</span> = any decline.</span>
+      <span class="summary-hint">Settle / Reverse act on the latest approved step above them, or on the transaction whose RRN you enter under Of RRN. Accounts can be <span class="mono">@ROLE</span>. Expect: <span class="mono">00</span>, a list <span class="mono">05,51</span>, or <span class="mono">!00</span> = any decline.</span>
     </div>
     <div class="table-wrap">
       <table class="tbl cd-steps">
-        <thead><tr><th>#</th><th>Action</th><th>From</th><th>To</th><th>Amount</th><th>Ccy</th><th>Settle amt</th><th>Card (opt.)</th><th title="Processing code override">Proc</th><th title="Remote on-us: sent with the target's remote acquirer">Remote</th><th>Expect</th><th></th></tr></thead>
+        <thead><tr><th>#</th><th>Action</th><th>From</th><th>To</th><th>Amount</th><th>Ccy</th><th>Settle amt</th><th title="Settle / Reverse: the RRN of the transaction to act on. Blank = the latest approved step above">Of RRN</th><th>Card (opt.)</th><th title="Processing code override">Proc</th><th title="Remote on-us: sent with the target's remote acquirer">Remote</th><th>Expect</th><th></th></tr></thead>
         <tbody id="cdSteps"></tbody>
       </table>
     </div>
@@ -868,8 +868,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20260927135715"></script>
-<script src="agent.js?v=20260927135715"></script>
-<script src="app.js?v=20260927135715"></script>
+<script src="config.js?v=20260927150214"></script>
+<script src="agent.js?v=20260927150214"></script>
+<script src="app.js?v=20260927150214"></script>
 </body>
 </html>

@@ -1281,9 +1281,9 @@ async function loadCases() {
 const expectLabel = (e) => (e && e.startsWith('!') ? 'not ' + e.slice(1) : e);
 function stepChip(s) {
   const cls = s.action === 'COMPLETION' ? 'ok' : s.action === 'REVERSAL' ? 'bad' : 'neutral';
-  const amt = s.settleAmount || s.amount;
+  const amt = s.settleAmount || s.amount || (s.action === 'COMPLETION' && s.ofRrn ? 'original' : '');
   const role = [s.from, s.to].filter(a => a && a.startsWith('@')).join('→');
-  return `<span class="chain-step"><span class="pill ${cls}">${escapeHtml(ACTION_NAMES[s.action] || s.action)}</span>${s.remote === 'Y' ? '<span class="pill warn">remote</span>' : ''}${role ? `<span class="mono role">${escapeHtml(role)}</span>` : ''}${amt ? `<span class="mono muted">${escapeHtml(amt)}</span>` : ''}<span class="expect mono" title="Expected response code">→ ${escapeHtml(expectLabel(s.expect))}</span></span>`;
+  return `<span class="chain-step"><span class="pill ${cls}">${escapeHtml(ACTION_NAMES[s.action] || s.action)}</span>${s.remote === 'Y' ? '<span class="pill warn">remote</span>' : ''}${role ? `<span class="mono role">${escapeHtml(role)}</span>` : ''}${amt ? `<span class="mono muted">${escapeHtml(amt)}</span>` : ''}${s.ofRrn ? `<span class="mono role" title="Acts on this RRN">of ${escapeHtml(s.ofRrn)}</span>` : ''}<span class="expect mono" title="Expected response code">→ ${escapeHtml(expectLabel(s.expect))}</span></span>`;
 }
 
 function renderCases() {
@@ -1407,6 +1407,7 @@ function stepRowHtml(s) {
     <td><input class="s-amount" value="${v('amount')}" placeholder="default" inputmode="decimal"></td>
     <td><input class="s-currency sm" value="${escapeHtml(s.currency ? (CCY_ALPHA[s.currency] || s.currency) : '')}" placeholder="def"></td>
     <td><input class="s-settle" value="${v('settleAmount')}" placeholder="—" inputmode="decimal"></td>
+    <td><input class="s-ofrrn mono" value="${v('ofRrn')}" placeholder="step above" maxlength="12" title="Settle / Reverse: RRN of the transaction to act on (sent earlier, or in the switch log). Blank = the latest approved step above"></td>
     <td><input class="s-pan" value="${v('pan')}" placeholder="target card"></td>
     <td><input class="s-proc sm" value="${v('proc')}" placeholder="def" inputmode="numeric" maxlength="6" title="Processing code override (6 digits)"></td>
     <td class="c"><input type="checkbox" class="s-remote" ${s.remote === 'Y' ? 'checked' : ''}></td>
@@ -1426,6 +1427,9 @@ function syncStepRows() {
     tr.querySelector('.s-currency').disabled = fo || net || inq;
     tr.querySelector('.s-pan').disabled = fo || net;
     tr.querySelector('.s-settle').disabled = a !== 'COMPLETION';
+    tr.querySelector('.s-ofrrn').disabled = !fo;
+    // With an RRN, a blank settle amount settles the original amount.
+    tr.querySelector('.s-settle').placeholder = a === 'COMPLETION' && tr.querySelector('.s-ofrrn').value.trim() ? 'original' : '—';
     tr.querySelector('.s-remote').disabled = fo || net;
     tr.querySelector('.s-proc').disabled = fo || net;
   });
@@ -1465,6 +1469,7 @@ $('cdClose').addEventListener('click', () => $('caseDlg').close());
 $('cdCancel').addEventListener('click', () => $('caseDlg').close());
 document.querySelector('.cd-add').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) addStep({ action: b.dataset.add, expect: '00' }); });
 $('cdSteps').addEventListener('change', (e) => { if (e.target.classList.contains('s-action')) syncStepRows(); });
+$('cdSteps').addEventListener('input', (e) => { if (e.target.classList.contains('s-ofrrn')) syncStepRows(); });
 $('cdSteps').addEventListener('click', (e) => {
   const b = e.target.closest('.t-btn');
   if (!b) return;
@@ -1479,8 +1484,9 @@ function readSteps() {
   return [...$('cdSteps').rows].map((tr, i) => {
     const get = (c) => { const el = tr.querySelector(c); return el.disabled ? '' : el.value.trim(); };
     const s = { action: tr.querySelector('.s-action').value, expect: tr.querySelector('.s-expect').value.trim() || '00' };
-    const map = { from: '.s-from', to: '.s-to', amount: '.s-amount', settleAmount: '.s-settle', pan: '.s-pan' };
-    for (const [k, sel] of Object.entries(map)) { const v = get(sel); if (v) s[k] = /amount/i.test(k) ? v.replace(/,/g, '') : v; }
+    const map = { from: '.s-from', to: '.s-to', amount: '.s-amount', settleAmount: '.s-settle', ofRrn: '.s-ofrrn', pan: '.s-pan' };
+    for (const [k, sel] of Object.entries(map)) { const v = get(sel); if (v) s[k] = /amount/i.test(k) ? v.replace(/,/g, '') : k === 'ofRrn' ? v.replace(/\s/g, '') : v; }
+    if (s.ofRrn && !/^[A-Za-z0-9]{1,12}$/.test(s.ofRrn)) throw new Error(`Step ${i + 1}: the RRN must be up to 12 letters or digits`);
     const rm = tr.querySelector('.s-remote');
     if (rm.checked && !rm.disabled) s.remote = 'Y';
     const proc = get('.s-proc');
@@ -1515,11 +1521,11 @@ $('caseForm').addEventListener('submit', async (e) => {
 });
 
 // ---------- UAT: spreadsheet import / export ----------
-const CASE_COLS = ['case_id', 'case_name', 'category', 'description', 'precondition', 'expected_result', 'step', 'action', 'from_account', 'to_account', 'amount', 'currency', 'settle_amount', 'card', 'remote', 'processing_code', 'expected_code', 'note'];
+const CASE_COLS = ['case_id', 'case_name', 'category', 'description', 'precondition', 'expected_result', 'step', 'action', 'from_account', 'to_account', 'amount', 'currency', 'settle_amount', 'of_rrn', 'card', 'remote', 'processing_code', 'expected_code', 'note'];
 const csvCell = (v) => { const s = v == null ? '' : String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 function casesToCsv(cases) {
   const lines = [CASE_COLS.join(',')];
-  for (const c of cases) c.steps.forEach((s, i) => lines.push([c.id, c.name, i ? '' : c.category, i ? '' : c.description, i ? '' : c.precondition, i ? '' : c.expectedResult, i + 1, s.action, s.from, s.to, s.amount, s.currency ? (CCY_ALPHA[s.currency] || s.currency) : '', s.settleAmount, s.pan, s.remote, s.proc, s.expect, s.note].map(csvCell).join(',')));
+  for (const c of cases) c.steps.forEach((s, i) => lines.push([c.id, c.name, i ? '' : c.category, i ? '' : c.description, i ? '' : c.precondition, i ? '' : c.expectedResult, i + 1, s.action, s.from, s.to, s.amount, s.currency ? (CCY_ALPHA[s.currency] || s.currency) : '', s.settleAmount, s.ofRrn ? "'" + s.ofRrn : '', s.pan, s.remote, s.proc, s.expect, s.note].map(csvCell).join(',')));
   return lines.join('\r\n') + '\r\n';
 }
 function download(name, text, type) {
@@ -1564,6 +1570,7 @@ function csvToCases(text) {
     id: col('case_id', 'id', 'test_id', 'test_case_#', 'test_case'), name: col('case_name', 'name', 'title'), desc: col('description', 'desc', 'acceptance_criteria'),
     action: col('action', 'type', 'transaction'), from: col('from_account', 'from', 'account'), to: col('to_account', 'to'),
     amount: col('amount'), ccy: col('currency', 'ccy'), settle: col('settle_amount', 'settlement_amount', 'settle'),
+    ofRrn: col('of_rrn', 'original_rrn', 'parent_rrn', 'rrn'),
     pan: col('card', 'pan', 'card_number'), remote: col('remote', 'remote_on_us'), proc: col('processing_code', 'proc', 'proc_code'), expect: col('expected_code', 'expected', 'expect', 'expected_response'), note: col('note', 'notes', 'remarks'),
   };
   if (ix.action == null) throw new Error('Missing an "action" column — download the Template to see the layout');
@@ -1591,6 +1598,12 @@ function csvToCases(text) {
     if (g('to')) s.to = g('to').replace(/^'/, '');
     if (g('amount')) s.amount = g('amount').replace(/,/g, '');
     if (g('settle')) s.settleAmount = g('settle').replace(/,/g, '');
+    if (g('ofRrn')) {
+      const rrn = g('ofRrn').replace(/[\s']/g, '');
+      // Excel shows long numbers as 3.56502E+11 and drops digits: the column must be text.
+      if (/e\+/i.test(rrn)) throw new Error(`Row ${n + 2}: RRN "${g('ofRrn')}" was shortened by Excel; format the of_rrn column as Text and type it again`);
+      s.ofRrn = rrn;
+    }
     if (g('pan')) s.pan = g('pan').replace(/[\s']/g, '');
     if (g('note')) s.note = g('note');
     if (/^(y|yes|true|1)$/i.test(g('remote'))) s.remote = 'Y';
@@ -1696,7 +1709,7 @@ function renderRun(run) {
       <tr class="${s.status === 'PASS' ? '' : 'row-' + statusCls(s.status)}">
         <td class="muted">${s.no}</td>
         <td>${escapeHtml(ACTION_NAMES[s.action] || s.action)}<div class="sub mono">${escapeHtml([s.mti, s.procCode].filter(Boolean).join(' · '))}</div></td>
-        <td>${escapeHtml(s.rrn || '')}${s.parentRrn ? `<div class="sub">parent ${escapeHtml(s.parentRrn)}</div>` : ''}</td>
+        <td>${escapeHtml(s.rrn || '')}${s.parentRrn ? `<div class="sub" title="${escapeHtml(s.parentSource || 'the latest approved step above')}">parent ${escapeHtml(s.parentRrn)}${s.parentSource ? ' · ' + escapeHtml(s.parentSource.startsWith('found in') ? 'switch log' : 'earlier run') : ''}</div>` : ''}</td>
         <td>${escapeHtml(s.from || '')}${s.fromRole ? `<div class="sub">${escapeHtml(s.fromRole)}</div>` : ''}${s.to ? ' → ' + escapeHtml(s.to) : ''}</td>
         <td class="num">${escapeHtml(s.amount || '')} <span class="muted">${escapeHtml(CCY_ALPHA[s.currency] || s.currency || '')}</span></td>
         <td class="mono">${escapeHtml(expectLabel(s.expect))}</td>
