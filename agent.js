@@ -86,6 +86,8 @@ const AGENT = (() => {
     show('update');
     $g('guNeed').textContent = cfg.minAgentVersion;
     $g('guHave').textContent = info.version || 'an older version';
+    $g('guLatestText').hidden = !cfg.agentVersion;
+    $g('guLatest').textContent = cfg.agentVersion || '';
     if (!updateTimer) updateTimer = setInterval(async () => {
       const r = await probe();
       if (r.ok && !outdated(r.info)) connect();
@@ -163,10 +165,15 @@ const AGENT = (() => {
 
     async function download(msgId) {
       msg(msgId, 'Preparing download…');
-      const { data, error } = await sb.storage.from(cfg.downloadBucket || 'downloads').createSignedUrl(cfg.downloadPath || 'switchproof-agent.jar', 120, { download: true });
-      if (error) { msg(msgId, error.message, 'bad'); return; }
-      msg(msgId, '');
-      location.href = data.signedUrl;
+      const r = await downloadInstaller();
+      msg(msgId, r.error || '', r.error ? 'bad' : '');
+    }
+    if (cfg.agentVersion) {   // the version in the download
+      for (const [btn, note] of [['gcDownload', 'gcVer'], ['guDownload', 'guVer']]) {
+        $g(btn).textContent = 'Download SwitchProof ' + cfg.agentVersion;
+        $g(note).textContent = (cfg.downloadPath || 'SwitchProof-Setup.exe') + ' · version ' + cfg.agentVersion + ' · Windows 10 or 11';
+        $g(note).hidden = false;
+      }
     }
     $g('gcDownload').addEventListener('click', () => download('gcDlMsg'));
     $g('guDownload').addEventListener('click', () => download('guDlMsg'));
@@ -174,7 +181,7 @@ const AGENT = (() => {
       msg('guMsg', 'Checking…');
       const r = await probe();
       if (!r.ok) { msg('guMsg', 'SwitchProof is not running. Open it from the Start menu.', 'bad'); return; }
-      if (outdated(r.info)) { msg('guMsg', 'Still version ' + (r.info.version || 'unknown') + '. Close SwitchProof, run the new installer, then open it again.', 'bad'); return; }
+      if (outdated(r.info)) { msg('guMsg', 'Still version ' + (r.info.version || 'unknown') + '. Run the new installer: it closes SwitchProof, updates it and starts it again.', 'bad'); return; }
       msg('guMsg', '');
       connect();
     });
@@ -202,7 +209,18 @@ const AGENT = (() => {
   /** The signed-in Supabase client (hosted mode only; null before sign-in or when running locally). */
   const supabase = () => sb;
 
-  return { hosted, url, link, apiFetch, ready, base, supabase };
+  /** Starts the installer download (signed link to the private bucket). */
+  async function downloadInstaller() {
+    if (!sb) return { error: 'Sign in first' };
+    const { data, error } = await sb.storage.from(cfg.downloadBucket || 'downloads').createSignedUrl(cfg.downloadPath || 'switchproof-agent.jar', 120, { download: true });
+    if (error) return { error: error.message };
+    location.href = data.signedUrl;
+    return {};
+  }
+  /** The version in the download, when it is newer than the SwitchProof on this PC. */
+  const updateFor = (have) => (hosted && cfg.agentVersion && have && older(have, cfg.agentVersion) ? cfg.agentVersion : null);
+
+  return { hosted, url, link, apiFetch, ready, base, supabase, downloadInstaller, updateFor };
 })();
 
 const apiFetch = AGENT.apiFetch;

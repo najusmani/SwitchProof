@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260927114130">
+<link rel="stylesheet" href="style.css?v=20260927135715">
 <script>try { var t = JSON.parse(localStorage.getItem('ss.theme')); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
 </head>
 <body class="doc-page">
@@ -43,6 +43,7 @@
       <h2>Team</h2>
       <p class="price" data-price="team">$100 / month</p>
       <p class="price-note" data-note="team">Per person, billed monthly · 7-day free trial</p>
+      <p class="price-deal" data-deal hidden></p>
       <ul>
         <li>Unlimited load tests</li>
         <li>Bundles: several transaction types in one load test</li>
@@ -57,6 +58,7 @@
       <h2>Enterprise</h2>
       <p class="price" data-price="enterprise">$500 / month</p>
       <p class="price-note" data-note="enterprise">Per person, billed monthly · 1-day free trial</p>
+      <p class="price-deal" data-deal hidden></p>
       <ul>
         <li>Everything in Team</li>
         <li>Money checks: amount blocks, accounting entries and balances read from the bank database (read-only)</li>
@@ -93,7 +95,7 @@
   <a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a>
 </div></footer>
 
-<script src="config.js?v=20260927120523"></script>
+<script src="config.js?v=20260927135715"></script>
 <script>
 // Prices come from Paddle (the same prices the checkout charges), shown for the visitor's country.
 (function () {
@@ -103,6 +105,10 @@
   // Card checkout is on: buttons lead to sign-in, where "Buy by card" is.
   document.querySelectorAll('[data-cta]').forEach(function (a) { a.textContent = 'Sign in to buy'; a.setAttribute('href', './'); });
   document.querySelectorAll('[data-when]').forEach(function (li) { li.hidden = li.getAttribute('data-when') !== 'checkout'; });
+  if (cfg.discount && cfg.discount.code) document.querySelectorAll('[data-deal]').forEach(function (p) {
+    p.textContent = 'Launch offer: ' + cfg.discount.text + ', applied at checkout';
+    p.hidden = false;
+  });
   function span(p) {
     if (!p) return '';
     var n = Number(p.frequency) || 1;

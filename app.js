@@ -1802,11 +1802,16 @@ function acctOpen(open) {
 /** A dot on the account button when Feedback or Access has something new. */
 function acctDot() {
   const count = (b) => (b.hidden ? 0 : Number(b.textContent) || 0);
-  const n = count($('fbBadge')) + ($('accessOpen').hidden ? 0 : count($('accBadge')));
+  const n = count($('fbBadge')) + ($('accessOpen').hidden ? 0 : count($('accBadge'))) + ($('updateItem').hidden ? 0 : 1);
   $('acctDot').hidden = !n;
   $('acctBtn').title = n ? `Account · ${n} new` : 'Account';
 }
 $('acctBtn').addEventListener('click', (e) => { e.stopPropagation(); acctOpen($('acctMenu').hidden); });
+$('updateItem').addEventListener('click', async () => {
+  toast('Downloading SwitchProof ' + $('updateBadge').textContent + '. Run it: it closes SwitchProof, updates it and starts it again.', 'ok');
+  const r = await AGENT.downloadInstaller();
+  if (r.error) toast(r.error, 'bad');
+});
 $('acctMenu').addEventListener('click', (e) => { if (e.target.closest('.acct-item')) acctOpen(false); });
 document.addEventListener('click', (e) => { if (!$('acctMenu').hidden && !e.target.closest('.acct')) acctOpen(false); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('acctMenu').hidden) { acctOpen(false); $('acctBtn').focus(); } });
@@ -2127,7 +2132,7 @@ const dbFormValues = () => ({
   target: dbFor.id, host: $('dbHost').value.trim(), port: $('dbPort').value, service: $('dbService').value.trim(),
   schema: $('dbSchema').value.trim(), user: $('dbUser').value.trim(), password: $('dbPass').value, moneyCheck: $('dbMode').value,
 });
-const DB_TABLES = { switchLog: 'Switch log (RRN → reference)', entries: 'Accounting entries', blocks: 'Amount blocks', balances: 'Balances (current, blocked, uncollected, available)', accounts: 'Accounts', history: 'Entry history (after end of day)', trnCodes: 'Transaction descriptions' };
+const DB_TABLES = { switchLog: 'Switch log (RRN → reference)', entries: 'Accounting entries', blocks: 'Amount blocks', balances: 'Balances (current, blocked, uncollected, available)', accounts: 'Accounts', history: 'Entry history (after end of day)', trnCodes: 'Transaction descriptions', allEntries: 'GL entries (off-us cards)', glMaster: 'GL names' };
 $('dbTestBtn').addEventListener('click', async () => {
   $('dbMsg').className = 'fb-msg'; $('dbMsg').textContent = 'connecting…'; $('dbTest').hidden = true;
   try {
@@ -2230,6 +2235,7 @@ function renderTrail(d) {
         <span class="mono mt-mti">${escapeHtml(v.mti)}</span>
         <span class="mono muted">${escapeHtml(m.proc_code || '')}</span>
         <span class="mt-kind">${escapeHtml(v.label || '')}</span>
+        ${m.offus_onus === 'F' ? '<span class="pill neutral" title="The card belongs to another bank">off-us card</span>' : ''}
         <span class="pill ${OK_CODES.has(v.resp) ? 'ok' : 'bad'} code" title="${escapeHtml(CODE_DESC[v.resp] || '')}">${escapeHtml(v.resp || '—')}</span>
         <span class="pill ${ok ? 'ok' : v.status === 'WAIT' ? 'warn' : 'bad'}">${ok ? 'money ✓' : v.status === 'WAIT' ? 'money ⏳' : 'money ✗'}</span>
       </div>
@@ -2241,6 +2247,7 @@ function renderTrail(d) {
   }).join('');
   const blocks = Object.values(d.blocks || {}).flat();
   const legs = Object.values(d.entries || {}).flat();
+  const glLegs = Object.values(d.glEntries || {}).flat();
   const accts = Object.values(d.accounts || {});
   const table = (head, rows) => rows ? `<div class="table-wrap"><table class="tbl"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>` : '';
   const amtCell = (v) => (v == null || v === '' ? '<span class="muted">—</span>' : escapeHtml(fmtAmt(v)));
@@ -2249,6 +2256,8 @@ function renderTrail(d) {
         blocks.map(b => `<tr><td class="mono">${escapeHtml(b.amount_block_no)}</td><td class="mono">${escapeHtml(b.account)}</td><td class="num">${money2(b.amount)}</td><td>${b.record_stat === 'O' ? '<span class="pill warn">open</span>' : '<span class="pill neutral">closed</span>'}</td><td class="mono">${escapeHtml(String(b.effective_date || '').slice(0, 10))}</td></tr>`).join('')) : '')
     + (legs.length ? `<h3 class="mt-h">Accounting entries <span class="muted">customer accounts</span></h3>` + table('<th>Reference</th><th>Event</th><th>Account</th><th>Dr/Cr</th><th class="num">Amount</th><th>Ccy</th><th>Transaction</th><th>Value date</th>',
         legs.map(l => `<tr><td class="mono">${escapeHtml(l.trn_ref_no)}</td><td>${eventText(l.event)}</td><td class="mono">${escapeHtml(l.ac_no)}</td><td>${l.drcr_ind === 'D' ? 'Debit' : 'Credit'}</td><td class="num">${money2(Number(l.fcy_amount) ? l.fcy_amount : l.lcy_amount)}</td><td>${escapeHtml(l.ac_ccy)}</td><td title="Transaction code ${escapeHtml(l.trn_code)}">${escapeHtml((d.trnCodes || {})[l.trn_code] || l.trn_code)}</td><td class="mono">${escapeHtml(String(l.value_dt || '').slice(0, 10))}</td></tr>`).join('')) : '')
+    + (glLegs.length ? `<h3 class="mt-h">GL entries <span class="muted">no customer account</span></h3>` + table('<th>Reference</th><th>Event</th><th>GL</th><th>Dr/Cr</th><th class="num">Amount</th><th>Ccy</th><th>Transaction</th><th>Value date</th>',
+        glLegs.map(l => `<tr><td class="mono">${escapeHtml(l.trn_ref_no)}</td><td>${eventText(l.event)}</td><td><span class="mono">${escapeHtml(l.ac_no)}</span>${(d.glNames || {})[l.ac_no] ? ' <span class="muted">' + escapeHtml(d.glNames[l.ac_no]) + '</span>' : ''}</td><td>${l.drcr_ind === 'D' ? 'Debit' : 'Credit'}</td><td class="num">${money2(Number(l.fcy_amount) ? l.fcy_amount : l.lcy_amount)}</td><td>${escapeHtml(l.ac_ccy)}</td><td title="Transaction code ${escapeHtml(l.trn_code)}">${escapeHtml((d.trnCodes || {})[l.trn_code] || l.trn_code)}</td><td class="mono">${escapeHtml(String(l.value_dt || '').slice(0, 10))}</td></tr>`).join('')) : '')
     + (accts.length ? `<h3 class="mt-h">Balances now</h3>` + table('<th>Account</th><th>Ccy</th><th class="num">Current</th><th class="num">Blocked</th><th class="num">Uncollected</th><th class="num">Available</th><th class="num">Net</th>',
         accts.map(a => `<tr><td class="mono">${escapeHtml(a.cust_ac_no)}</td><td>${escapeHtml(a.ccy)}</td><td class="num">${amtCell(a.current_balance)}</td><td class="num">${amtCell(a.blocked_amount)}</td><td class="num">${amtCell(a.uncollected)}</td><td class="num">${amtCell(a.available_balance)}</td><td class="num">${amtCell(a.net_bal)}</td></tr>`).join('')) : '');
 }
@@ -2290,6 +2299,35 @@ async function refreshLicense() {
   await loadLicense();
 }
 
+/**
+ * The offer strip under the top bar, for Free users and trial users (invite code or grant) while a checkout
+ * discount is on. Closing it is remembered on this browser for this offer; a new trial or offer shows it again.
+ */
+function dealKey() {
+  const d = deal();
+  return d ? `${d.code}:${onTrial() ? 'trial:' + license.plan + ':' + license.expires : 'free'}` : '';
+}
+function renderDealBar() {
+  const d = deal();
+  const free = license.plan === 'free', trial = onTrial();
+  const show = AGENT.hosted && !!d && (free || trial) && (canBuy('team') || canBuy('enterprise')) && store.get('dealClosed', '') !== dealKey();
+  $('dealBar').hidden = !show;
+  if (!show) return;
+  const name = PLAN_NAMES[license.plan] || license.plan;
+  if (trial && canBuy(license.plan)) {
+    const end = new Date(license.expires + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    $('dealText').textContent = `Your ${name} trial ends ${end}. Keep it for ${d.text}.`;
+    $('dealGo').textContent = `Keep ${name}`;
+    $('dealGo').dataset.plan = license.plan;
+  } else {
+    $('dealText').textContent = `Team or Enterprise at ${d.text}, after a free trial.`;
+    $('dealGo').textContent = 'See plans';
+    $('dealGo').dataset.plan = '';
+  }
+}
+$('dealGo').addEventListener('click', () => { const p = $('dealGo').dataset.plan; if (p) buy(p); else $('planBtn').click(); });
+$('dealClose').addEventListener('click', () => { store.set('dealClosed', dealKey()); $('dealBar').hidden = true; });
+
 function renderPlan() {
   const name = PLAN_NAMES[license.plan] || license.plan;
   const b = $('planBtn');
@@ -2304,6 +2342,7 @@ function renderPlan() {
   $('uatLimit').hidden = can('uat');
   $('uatLimit').textContent = `Free: up to ${lim.uatCases} cases per run`;
   if ($('planDlg').open) renderPlanDialog();
+  renderDealBar();
 }
 
 function renderPlanDialog() {
@@ -2334,8 +2373,9 @@ function showUpgrade(d) {
   const card = canBuy(plan);
   $('upTitle').textContent = `Part of the ${PLAN_NAMES[plan] || d.plan} plan`;
   $('upText').textContent = d.error || '';
+  const offer = deal();
   $('upHow').textContent = !AGENT.hosted ? 'Plans come with your SwitchProof account on the SwitchProof website.'
-    : card ? `Buy ${PLAN_NAMES[plan]} by card now, talk to us for an invoice, or enter an invite code under My plan.`
+    : card ? `Buy ${PLAN_NAMES[plan]} by card now${offer ? ' (' + offer.text + ')' : ''}, talk to us for an invoice, or enter an invite code under My plan.`
     : 'Talk to us for a price, or enter an invite code under My plan.';
   $('upBuy').hidden = !card;
   $('upBuy').textContent = `Buy ${PLAN_NAMES[plan]} by card`;
@@ -2359,6 +2399,11 @@ const prices = {};          // plan -> "US$100.00 / month · 7-day free trial", 
 let paddleLoading = null, buying = null;
 const canBuy = (plan) => { const c = paddleCfg(); return !!(AGENT.hosted && c && c.token && c.prices && c.prices[plan]); };
 const daysLeft = (day) => day ? Math.ceil((Date.parse(day + 'T23:59:59') - Date.now()) / 86400e3) : Infinity;
+/** The discount every card checkout starts with, e.g. { code: 'TRIAL50', text: '50% off every month' }. */
+const deal = () => { const c = paddleCfg(); return c && c.discount && c.discount.code ? c.discount : null; };
+/** A plan from an invite code or a grant, with an end date: a trial the offer is shown to. */
+const onTrial = () => license.plan !== 'free' && license.plan !== 'developer' && !!license.expires && !!license.source
+  && !/Paid by card|admin/i.test(license.source);
 
 function loadPaddle() {
   const cfg = paddleCfg();
@@ -2403,15 +2448,21 @@ function renderOffers() {
   $('planBuy').hidden = !show;
   if (!show) return;
   const mine = PLAN_RANK[license.plan] || 0;
-  const renew = daysLeft(license.expires) <= 30 && license.source !== 'Paid by card';
-  $('planOffers').innerHTML = ['team', 'enterprise']
+  const trial = onTrial();
+  const renew = trial || (daysLeft(license.expires) <= 30 && license.source !== 'Paid by card');
+  const d = deal();
+  const banner = d && trial && (canBuy('team') || canBuy('enterprise'))
+    ? `<div class="plan-deal-banner"><b>Buy during your trial: ${escapeHtml(d.text)}.</b> Your ${escapeHtml(PLAN_NAMES[license.plan] || license.plan)} trial ends ${escapeHtml(license.expires)}; the discount is applied at checkout.</div>` : '';
+  $('planOffers').innerHTML = banner + ['team', 'enterprise']
     .filter(p => PLAN_RANK[p] > mine || (PLAN_RANK[p] === mine && renew))
     .map(p => {
       const again = PLAN_RANK[p] === mine;
+      const verb = again ? (trial ? 'Keep' : 'Renew') : 'Buy';
       return `<div class="plan-offer">
-        <div class="plan-offer-head"><strong>${again ? 'Renew ' : ''}${PLAN_NAMES[p]}</strong><span class="plan-price mono">${escapeHtml(prices[p] || '')}</span></div>
+        <div class="plan-offer-head"><strong>${verb} ${PLAN_NAMES[p]}</strong><span class="plan-price mono">${escapeHtml(prices[p] || '')}</span></div>
+        ${d && canBuy(p) ? `<p class="plan-deal">Launch offer: ${escapeHtml(d.text)}, applied at checkout</p>` : ''}
         <p>${escapeHtml(OFFERS[p])}</p>
-        ${canBuy(p) ? `<button type="button" class="btn primary sm" data-buy="${p}">${again ? 'Renew' : 'Buy'} by card</button>`
+        ${canBuy(p) ? `<button type="button" class="btn primary sm" data-buy="${p}">${again ? (trial ? 'Buy' : 'Renew') : 'Buy'} by card</button>`
                     : `<button type="button" class="btn ghost sm" data-quote="${p}">Ask for a price</button>`}
       </div>`;
     }).join('');
@@ -2434,10 +2485,13 @@ async function buy(plan) {
   // The checkout sits outside our dialogs; an open modal dialog would cover it and block its clicks.
   ['planDlg', 'upgradeDlg'].forEach(id => { if ($(id).open) $(id).close(); });
   buying = { plan, done: false };
+  const d = deal();
   P.Checkout.open({
     items: [{ priceId: paddleCfg().prices[plan], quantity: 1 }],
     customer: { email: user.email },
     customData: { email: user.email, user_id: user.id },   // the webhook grants the plan to this account
+    // The launch discount; if Paddle no longer accepts the code, it opens at full price and asks for a code.
+    ...(d ? { discountCode: d.code } : {}),
   });
 }
 
@@ -2837,10 +2891,25 @@ document.querySelector('#accessDlg').addEventListener('change', async (e) => {
   accRender();
 });
 
+// ---------- Which SwitchProof runs on this PC ----------
+async function showAgentVersion(info) {
+  if (!info) { try { info = await (await AGENT.apiFetch('/api/agent')).json(); } catch (e) { return; } }
+  const v = info && info.version;
+  if (!v) return;
+  $('acctVer').textContent = 'SwitchProof ' + v + ' on this PC';
+  const newer = AGENT.updateFor && AGENT.updateFor(v);
+  $('updateItem').hidden = !newer;
+  $('updateBadge').textContent = newer || '';
+  acctDot();
+  $('planVer').textContent = 'SwitchProof for Windows ' + v + ' on this PC';
+  document.querySelector('.topbar .brand').title = 'ISO 8583 load, function & UAT console · SwitchProof ' + v;
+}
+
 // ---------- Init ----------
 setMode(mode);
 // Hosted: wait until signed in and connected to the user's agent.
-AGENT.ready.then(() => {
+AGENT.ready.then((info) => {
+  showAgentVersion(info);
   refreshLicense();
   setInterval(refreshLicense, 6 * 60 * 60 * 1000);   // a plan that ends or is revoked shows up within hours
   showView(store.get('view', 'load'));

@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260927114130">
+<link rel="stylesheet" href="style.css?v=20260927135715">
 </head>
 <body>
 
@@ -64,9 +64,10 @@
       <span class="acct-dot" id="acctDot" hidden></span>
     </button>
     <div class="acct-menu" id="acctMenu" role="menu" aria-label="Account" hidden>
-      <div class="acct-head"><span class="acct-label">Signed in as</span><span class="user-email" id="userEmail"></span></div>
+      <div class="acct-head"><span class="acct-label">Signed in as</span><span class="user-email" id="userEmail"></span><span class="acct-ver" id="acctVer"></span></div>
       <button type="button" role="menuitem" class="acct-item" id="fbOpen" title="Request a feature or report a problem">Feedback<span class="fb-badge" id="fbBadge" hidden></span></button>
       <button type="button" role="menuitem" class="acct-item" id="accessOpen" hidden title="Grant plans and make invite codes">Access<span class="fb-badge" id="accBadge" hidden></span></button>
+      <button type="button" role="menuitem" class="acct-item acct-update" id="updateItem" hidden title="Download the installer: it closes SwitchProof, updates it and starts it again">Update SwitchProof<span class="fb-badge" id="updateBadge"></span></button>
       <div class="acct-sep" role="separator"></div>
       <button type="button" role="menuitem" class="acct-item" id="agentDisconnect" title="Forget the pairing with this agent">Disconnect agent</button>
       <button type="button" role="menuitem" class="acct-item" data-signout>Sign out</button>
@@ -77,6 +78,13 @@
     <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
   </button>
 </header>
+
+<div class="deal-bar" id="dealBar" role="region" aria-label="Offer" hidden>
+  <span class="deal-tag">Launch offer</span>
+  <span class="deal-text" id="dealText"></span>
+  <button type="button" class="btn sm primary" id="dealGo"></button>
+  <button type="button" class="deal-close" id="dealClose" aria-label="Hide this offer" title="Hide">&times;</button>
+</div>
 
 <div id="viewLoad">
 <main class="layout">
@@ -549,20 +557,21 @@
         <p class="gx-eyebrow">Set up</p>
         <h2>Connect your agent</h2>
         <p class="gx-note">The console runs in this browser. Messages to your switch are sent by SwitchProof for Windows on a PC inside your network.</p>
-        <p class="gx-note gx-note-upgrade"><b>Already installed SwitchProof?</b> Versions before 1.4 can't connect to switchproof.online. Download and run the installer below: it updates SwitchProof and keeps your targets, test cases and results.</p>
+        <p class="gx-note gx-note-upgrade"><b>Already installed SwitchProof?</b> Versions before 1.4 can't connect to switchproof.online. Download and run the installer below: it closes the old version, updates it and keeps your targets, test cases and results.</p>
         <ol class="gx-steps">
           <li>
             <b>Download SwitchProof for Windows</b>
             <span>On a PC that can reach your switch (bank network or VPN). About 35&nbsp;MB, Java included, no admin rights needed.</span>
             <div class="gate-row"><button class="gx-btn" id="gcDownload" type="button">Download SwitchProof-Setup.exe</button><span class="gate-msg" id="gcDlMsg"></span></div>
+            <span class="gx-ver" id="gcVer" hidden></span>
           </li>
           <li>
             <b>Run the installer</b>
             <span>If Windows shows <i>Windows protected your PC</i>, choose <b>More info</b>, then <b>Run anyway</b>.</span>
           </li>
           <li>
-            <b>Open SwitchProof</b>
-            <span>From the Start menu or desktop. This page reconnects automatically. Keep the SwitchProof window open while you test.</span>
+            <b>SwitchProof starts by itself</b>
+            <span>When the installer finishes (next time, from the Start menu or desktop). This page connects automatically. Keep the SwitchProof window open while you test.</span>
           </li>
           <li>
             <b>Add your switch</b>
@@ -584,20 +593,21 @@
       <section class="gate-step" data-step="update" hidden>
         <p class="gx-eyebrow">Update required</p>
         <h2>Update SwitchProof</h2>
-        <p class="gx-note">This website needs SwitchProof for Windows <b id="guNeed"></b> or newer. The copy on this PC is <b id="guHave"></b>.</p>
+        <p class="gx-note">This website needs SwitchProof for Windows <b id="guNeed"></b> or newer. The copy on this PC is <b id="guHave"></b><span id="guLatestText" hidden>; the latest is <b id="guLatest"></b></span>.</p>
         <ol class="gx-steps">
           <li>
             <b>Download the update</b>
             <span>Same installer as before, about 35&nbsp;MB.</span>
             <div class="gate-row"><button class="gx-btn" id="guDownload" type="button">Download SwitchProof-Setup.exe</button><span class="gate-msg" id="guDlMsg"></span></div>
+            <span class="gx-ver" id="guVer" hidden></span>
           </li>
           <li>
-            <b>Close SwitchProof, then run the installer</b>
-            <span>Press <b>Stop agent</b> in the small SwitchProof window first, so the installer can replace it. Your targets, test cases and evidence are kept.</span>
+            <b>Run the installer</b>
+            <span>It closes the running SwitchProof, replaces the old version and starts the new one. Your targets, test cases and evidence are kept.</span>
           </li>
           <li>
-            <b>Open SwitchProof again</b>
-            <span>From the Start menu. This page continues by itself once the new version is running.</span>
+            <b>Come back to this page</b>
+            <span>It continues by itself once the new version is running.</span>
           </li>
         </ol>
         <div class="gate-msg" id="guMsg" aria-live="polite"></div>
@@ -702,6 +712,7 @@
     <textarea id="planToken" rows="3" class="mono" spellcheck="false" placeholder="A licence you were sent for a PC without internet"></textarea>
     <button type="button" class="btn sm ghost-plain" id="planTokenBtn">Use this licence</button>
   </details>
+  <p class="plan-ver" id="planVer"></p>
   <div class="fb-actions"><span class="fb-msg" id="planMsg"></span><button type="button" class="btn ghost" id="planRefresh">Refresh</button></div>
 </dialog>
 
@@ -857,8 +868,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20260927120523"></script>
-<script src="agent.js?v=20260927114130"></script>
-<script src="app.js?v=20260927114130"></script>
+<script src="config.js?v=20260927135715"></script>
+<script src="agent.js?v=20260927135715"></script>
+<script src="app.js?v=20260927135715"></script>
 </body>
 </html>

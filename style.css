@@ -1421,3 +1421,21 @@ body.doc-page { background: var(--bg); color: var(--text); min-height: 100vh; di
 .acct-sep { height: 1px; background: var(--border); margin: 4px 2px; }
 .acct-menu .fb-badge { margin-left: auto; }
 .gx-note-upgrade { border-left: 2px solid #d6a54a; padding-left: 10px; }
+.gx-ver { display: block; margin-top: 6px; font: 11.5px var(--mono); color: var(--muted); }
+.acct-ver { margin-top: 4px; font: 11px var(--mono); color: var(--muted); }
+.plan-ver { margin: 4px 0 10px; font: 11.5px var(--mono); color: var(--muted); }
+.plan-ver:empty { display: none; }
+.gx-steps .gate-row .gate-msg:empty { min-height: 0; margin-bottom: 0; }
+/* launch discount */
+.plan-deal { margin: 2px 0 6px !important; font-size: 12.5px !important; font-weight: 600; color: var(--ok) !important; }
+.plan-deal-banner { border: 1px solid var(--ok); background: color-mix(in srgb, var(--ok) 8%, var(--surface)); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px; line-height: 1.45; }
+.price-card .price-deal { margin: -6px 0 12px; font-size: 12.5px; font-weight: 600; color: var(--ok); }
+/* launch-offer strip under the top bar */
+.deal-bar { display: flex; align-items: center; gap: 12px; padding: 9px 28px; background: var(--ok-soft); border-bottom: 1px solid color-mix(in srgb, var(--ok) 30%, var(--border)); font-size: 13.5px; }
+.deal-bar[hidden] { display: none; }
+.deal-tag { flex: none; font: 600 10.5px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); padding: 2px 7px; border-radius: 2px; }
+.deal-text { flex: 1; min-width: 0; }
+.deal-bar .btn.sm { flex: none; }
+.deal-close { flex: none; width: 28px; height: 28px; border: 0; background: transparent; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; border-radius: var(--radius-sm); }
+.deal-close:hover { color: var(--text); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+@media (max-width: 640px) { .deal-bar { flex-wrap: wrap; padding: 9px 16px; } .deal-text { flex-basis: calc(100% - 40px); } }
