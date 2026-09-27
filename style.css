@@ -1206,3 +1206,52 @@ input.is-sample { border-color: var(--warn) !important; box-shadow: inset 0 0 0 
 .kind-tbl td.t-bad { color: var(--bad); }
 .kind-tbl td.t-warn { color: var(--warn); }
 .tbl td.type-cell { white-space: nowrap; }
+
+/* ============ Public pages: pricing, terms, privacy, refunds ============ */
+body.doc-page { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+.doc-top { border-bottom: 1px solid var(--border); background: var(--surface); }
+.doc-top-in, .doc-foot-in { max-width: 920px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.doc-brand { display: inline-flex; align-items: center; gap: 9px; color: var(--text); text-decoration: none; font: 600 12px var(--mono); letter-spacing: 0.14em; text-transform: uppercase; }
+.doc-brand svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.doc-nav { margin-left: auto; display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; }
+.doc-nav a, .doc-foot a { color: var(--muted); text-decoration: none; }
+.doc-nav a:hover, .doc-foot a:hover { color: var(--text); text-decoration: underline; }
+.doc-nav a[aria-current="page"] { color: var(--text); font-weight: 600; }
+.doc { flex: 1; width: 100%; max-width: 760px; margin: 0 auto; padding: 36px 20px 56px; }
+.doc.wide { max-width: 920px; }
+.doc h1 { font: 500 38px/1.15 var(--serif); margin: 0 0 8px; letter-spacing: -0.01em; }
+.doc .doc-meta { color: var(--muted); font-size: 13px; margin: 0 0 28px; }
+.doc .doc-lead { font-size: 16px; line-height: 1.6; margin: 0 0 26px; }
+.doc h2 { font: 600 17px/1.3 var(--font); margin: 32px 0 8px; }
+.doc h3 { font: 600 14.5px/1.3 var(--font); margin: 20px 0 6px; }
+.doc p, .doc li { font-size: 14.5px; line-height: 1.65; }
+.doc p { margin: 0 0 12px; }
+.doc ul { margin: 0 0 12px; padding-left: 22px; }
+.doc li { margin-bottom: 5px; }
+.doc a { color: var(--text); text-underline-offset: 3px; }
+.doc .doc-box { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); padding: 14px 16px; margin: 0 0 18px; }
+.doc .doc-box p:last-child { margin-bottom: 0; }
+.doc-foot { border-top: 1px solid var(--border); }
+.doc-foot-in { font-size: 12.5px; color: var(--muted); }
+.doc-foot-in span { margin-right: auto; }
+.price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 0 0 22px; }
+.price-card { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); padding: 18px; display: flex; flex-direction: column; }
+.price-card.featured { border-color: var(--text); }
+.price-card h2 { margin: 0 0 4px; font: 500 24px var(--serif); }
+.price-card .price { font: 600 15px var(--mono); margin: 4px 0 2px; min-height: 22px; }
+.price-card .price-note { font-size: 12px; color: var(--muted); margin: 0 0 12px; min-height: 16px; }
+.price-card ul { list-style: none; padding: 0; margin: 0 0 16px; flex: 1; }
+.price-card li { font-size: 13.5px; padding: 6px 0 6px 20px; border-top: 1px solid var(--border); position: relative; margin: 0; }
+.price-card li::before { content: '✓'; position: absolute; left: 2px; color: var(--ok); }
+.price-card .doc-cta { display: inline-block; text-align: center; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--text); color: var(--text); text-decoration: none; font-weight: 600; font-size: 13.5px; }
+.price-card.featured .doc-cta { background: var(--text); color: var(--bg); }
+.gx-legal { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; }
+.gx-legal a { color: inherit; opacity: 0.75; }
+.gx-legal a:hover { opacity: 1; }
+.plan-legal { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.plan-legal a { color: inherit; }
+@media (max-width: 760px) {
+  .price-grid { grid-template-columns: 1fr; }
+  .doc h1 { font-size: 30px; }
+  .doc-nav { margin-left: 0; width: 100%; }
+}

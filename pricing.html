@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pricing · SwitchProof</title>
+<meta name="description" content="SwitchProof plans: Free, Team and Enterprise, for ISO 8583 functional, UAT and load testing.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=20260927101327">
+<script>try { var t = JSON.parse(localStorage.getItem('ss.theme')); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
+</head>
+<body class="doc-page">
+
+<header class="doc-top"><div class="doc-top-in">
+  <a class="doc-brand" href="./"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="2"/><path d="M6 15.5l3.5-6 3 4.5 2.2-3.2L18 15.5"/></svg>SwitchProof</a>
+  <nav class="doc-nav" aria-label="SwitchProof">
+    <a href="pricing.html" aria-current="page">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a><a href="./">Sign in</a>
+  </nav>
+</div></header>
+
+<main class="doc wide">
+  <h1>Pricing</h1>
+  <p class="doc-lead">Functional, UAT and load testing for card switches that speak ISO&nbsp;8583. Start free; upgrade when you need bigger runs, full UAT and printable evidence.</p>
+
+  <div class="price-grid">
+    <section class="price-card">
+      <h2>Free</h2>
+      <p class="price">$0</p>
+      <p class="price-note">No card needed</p>
+      <ul>
+        <li>Load tests: up to 200 transactions per run, 5 at once</li>
+        <li>Functional tests, completions and reversals</li>
+        <li>UAT runs of up to 10 cases</li>
+        <li>Reports with a "Free" watermark</li>
+        <li>ISO 8583:1987 messages</li>
+      </ul>
+      <a class="doc-cta" href="./">Create a free account</a>
+    </section>
+
+    <section class="price-card featured">
+      <h2>Team</h2>
+      <p class="price" data-price="team">$100 / month</p>
+      <p class="price-note" data-note="team">Per person, billed monthly · 7-day free trial</p>
+      <ul>
+        <li>Unlimited load tests</li>
+        <li>Bundles: several transaction types in one load test</li>
+        <li>Full UAT runs, any number of cases</li>
+        <li>Reports without the watermark</li>
+        <li>ISO 8583:1993, 2003 and custom message formats</li>
+      </ul>
+      <a class="doc-cta" data-cta="team" href="mailto:najusmani@gmail.com?subject=SwitchProof%20Team">Talk to us</a>
+    </section>
+
+    <section class="price-card">
+      <h2>Enterprise</h2>
+      <p class="price" data-price="enterprise">$500 / month</p>
+      <p class="price-note" data-note="enterprise">Per person, billed monthly · 1-day free trial</p>
+      <ul>
+        <li>Everything in Team</li>
+        <li>Money checks: amount blocks, accounting entries and balances read from the bank database (read-only)</li>
+        <li>Balance and mini-statement replies compared with the bank's own figures</li>
+      </ul>
+      <a class="doc-cta" data-cta="enterprise" href="mailto:najusmani@gmail.com?subject=SwitchProof%20Enterprise">Talk to us</a>
+    </section>
+  </div>
+
+  <div class="doc-box">
+    <p><b>Several testers or a whole bank?</b> We can invoice you, take a bank transfer, and give everyone with your bank's email address the plan. Email <a href="mailto:najusmani@gmail.com">najusmani@gmail.com</a>, or use <b>Talk to us</b> under your plan after signing in.</p>
+  </div>
+
+  <h2>How buying works</h2>
+  <ul>
+    <li data-when="checkout" hidden>Sign in, click your plan (top right) and choose <b>Buy by card</b>. The plan turns on within seconds.</li>
+    <li data-when="no-checkout">Card checkout is being set up. Until then, email us and we'll send you a payment link or an invoice.</li>
+    <li>Free trials: 7 days for Team, 1 day for Enterprise. A card is needed to start one, and the first monthly payment is taken when the trial ends unless you cancel before then.</li>
+    <li>Plans renew every month until you cancel. Cancel any time from your Paddle receipt email or by writing to us; the plan runs to the end of the paid month.</li>
+    <li>Full refund within 14 days of your first payment: see the <a href="refunds.html">Refund Policy</a>.</li>
+    <li>Payments are handled by Paddle.com, our reseller and Merchant of Record, which also handles sales tax and VAT.</li>
+  </ul>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>A Windows PC that can reach your switch (bank network or VPN) for SwitchProof for Windows. Java is included; no admin rights needed.</li>
+    <li>For money checks: read-only access to the bank's FLEXCUBE database, and Oracle's JDBC driver (usually already on PCs with the Oracle client).</li>
+  </ul>
+  <p>Your test data stays on that PC. See the <a href="privacy.html">Privacy Policy</a>.</p>
+</main>
+
+<footer class="doc-foot"><div class="doc-foot-in">
+  <span>SwitchProof is provided by Najeebullah Usmani · <a href="mailto:najusmani@gmail.com">najusmani@gmail.com</a></span>
+  <a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a>
+</div></footer>
+
+<script src="config.js?v=20260927101327"></script>
+<script>
+// Prices come from Paddle (the same prices the checkout charges), shown for the visitor's country.
+(function () {
+  var cfg = (window.SWITCHPROOF_CONFIG || {}).paddle;
+  function fallback() { /* keep the prices written in the page */ }
+  if (!cfg || !cfg.token || !cfg.prices) return;
+  // Card checkout is on: buttons lead to sign-in, where "Buy by card" is.
+  document.querySelectorAll('[data-cta]').forEach(function (a) { a.textContent = 'Sign in to buy'; a.setAttribute('href', './'); });
+  document.querySelectorAll('[data-when]').forEach(function (li) { li.hidden = li.getAttribute('data-when') !== 'checkout'; });
+  function span(p) {
+    if (!p) return '';
+    var n = Number(p.frequency) || 1;
+    if (p.interval === 'week') return (7 * n) + '-day';
+    return n + '-' + p.interval;
+  }
+  var s = document.createElement('script');
+  s.src = 'https://cdn.paddle.com/paddle/v2/paddle.js';
+  s.onerror = fallback;
+  s.onload = function () {
+    try {
+      if (cfg.environment === 'sandbox') Paddle.Environment.set('sandbox');
+      Paddle.Initialize({ token: cfg.token });
+      var plans = Object.keys(cfg.prices).filter(function (p) { return cfg.prices[p]; });
+      Paddle.PricePreview({ items: plans.map(function (p) { return { priceId: cfg.prices[p], quantity: 1 }; }) }).then(function (r) {
+        var lines = (r && r.data && r.data.details && r.data.details.lineItems) || [];
+        lines.forEach(function (li) {
+          var plan = plans.filter(function (p) { return li.price && cfg.prices[p] === li.price.id; })[0];
+          if (!plan || !li.formattedTotals) return;
+          var cyc = li.price.billingCycle;
+          document.querySelector('[data-price="' + plan + '"]').textContent = li.formattedTotals.subtotal + (cyc ? ' / ' + cyc.interval : '');
+          var tax = li.totals && Number(li.totals.tax) > 0;
+          var every = !cyc ? 'one payment' : cyc.interval === 'month' ? 'billed monthly' : cyc.interval === 'year' ? 'billed yearly' : 'billed every ' + cyc.interval;
+          var trial = li.price.trialPeriod ? ' · ' + span(li.price.trialPeriod) + ' free trial' : '';
+          document.querySelector('[data-note="' + plan + '"]').textContent = 'Per person, ' + every + trial + (tax ? ' · plus ' + li.formattedTotals.tax + ' tax' : '');
+        });
+        fallback();
+      }, fallback);
+    } catch (e) { fallback(); }
+  };
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>
