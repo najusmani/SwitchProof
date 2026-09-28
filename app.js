@@ -2298,7 +2298,7 @@ async function fbLoad() {
 
 function fbTabs(tab) {
   fb.tab = tab;
-  document.querySelectorAll('.fb-tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.fbTab === tab)));
+  document.querySelectorAll('#fbDlg [data-fb-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.fbTab === tab)));
   document.querySelector('[data-fb-pane="list"]').hidden = tab === 'new';
   document.querySelector('[data-fb-pane="new"]').hidden = tab !== 'new';
   if (tab === 'new') setTimeout(() => $('fbTitleInput').focus(), 50);
@@ -2370,7 +2370,7 @@ function fbSensitive(text) {
 $('fbOpen').addEventListener('click', fbOpenDialog);
 $('fbClose').addEventListener('click', () => $('fbDlg').close());
 $('fbDlg').addEventListener('close', () => { if (fb.loaded) { store.set('fbSeen', Date.now()); fbBadge(); } });
-document.querySelector('.fb-tabs').addEventListener('click', (e) => { const b = e.target.closest('.fb-tab'); if (b) fbTabs(b.dataset.fbTab); });
+document.querySelector('#fbDlg .fb-tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-fb-tab]'); if (b) fbTabs(b.dataset.fbTab); });
 ['fbFilterKind', 'fbFilterStatus', 'fbSort'].forEach(id => $(id).addEventListener('change', fbRender));
 $('fbSearch').addEventListener('input', fbRender);
 
