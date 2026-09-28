@@ -1245,10 +1245,432 @@ function showView(v) {
   document.querySelectorAll('.view-tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.view === v)));
   $('viewLoad').hidden = v !== 'load';
   $('viewUat').hidden = v !== 'uat';
+  $('viewStandin').hidden = v !== 'standin';
   store.set('view', v);
-  if (v === 'uat') { loadCases(); loadRunHistory(); } else drawChart();
+  if (v === 'uat') { loadCases(); loadRunHistory(); }
+  else if (v === 'standin') { siTargetLine(); siPlanLine(); siLoadHistory(); siPoll(); }
+  else drawChart();
 }
 document.querySelector('.views').addEventListener('click', (e) => { const b = e.target.closest('.view-tab'); if (b) showView(b.dataset.view); });
+
+// ---------- Stand-in simulation (Enterprise): a cutover rehearsal ----------
+// The card switch runs in stand-in while no core is connected; its queue then goes to the New Flexcube Core.
+// Each step is a button, as it would be on the night; the agent plays the switch and reconciles every RRN, account and GL.
+const SI_KINDS = { WITHDRAWAL: 'ATM withdrawals', PURCHASE: 'POS purchases', PREAUTH: 'POS pre-authorizations', TRANSFER: 'Transfers' };
+const SI_ROWS_MAX = 1000;
+const SI_REASONS = { 51: 'Not enough balance in the file', 61: 'Over the stand-in limit', 91: 'No balance record' };
+let siRunId = store.get('siRun', null), siTimer = null, siLast = null;
+const siNum = (id) => Number($(id).value || 0);
+const siLines = (id) => $(id).value.split(/[\r\n]+/).map(x => x.trim()).filter(Boolean);
+const siFmt = (n) => (n == null || n === '' ? '–' : Number(n).toLocaleString());
+const siAmt = (n) => (n == null || n === '' ? '–' : Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+function siRules() {
+  return { days: siNum('siDays'), noRecord: $('siNoRecord').value, perTxnLimit: $('siPerTxn').value.trim(), dailyLimit: $('siDaily').value.trim() };
+}
+function siPostBody() {
+  const counts = {};
+  for (const k of Object.keys(SI_KINDS)) counts[k] = siNum('siCnt' + k);
+  return {
+    counts, completePct: siNum('siComplete'), reversePct: siNum('siReverse'), repeatPct: siNum('siRepeat'),
+    amountMin: $('siMin').value.trim(), amountMax: $('siMax').value.trim(), f7: $('siF7').value,
+    otherAccounts: siLines('siAccounts'), legacyReversals: siNum('siLegacyRev'),
+    forceAccount: $('siForceAcct').value.trim(), forceOver: $('siForceOver').value.trim(), holds: siLines('siHolds'),
+  };
+}
+function siReleaseBody() { return { rate: siNum('siRate'), inFlight: siNum('siInFlight') || 1, targetMinutes: siNum('siTarget') }; }
+
+function siDuration(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return s < 60 ? s + ' s' : s < 3600 ? `${Math.floor(s / 60)} min${s % 60 ? ' ' + (s % 60) + ' s' : ''}` : `${Math.floor(s / 3600)} h ${Math.floor(s % 3600 / 60)} min`;
+}
+
+function siPlanLine() {
+  const b = siPostBody(), c = b.counts;
+  const originals = Object.values(c).reduce((a, x) => a + x, 0) + (b.forceAccount ? 1 : 0);
+  const completions = Math.round(c.PREAUTH * b.completePct / 100);
+  const reversals = Math.round((c.WITHDRAWAL + c.PURCHASE + c.TRANSFER) * b.reversePct / 100);
+  const before = b.legacyReversals + b.holds.length;
+  const base = originals + completions + reversals + before, repeats = Math.round(base * b.repeatPct / 100);
+  $('siPlan').textContent = originals + before
+    ? `${originals.toLocaleString()} transactions reach the switch${before ? `, plus ${before.toLocaleString()} from before the cut-off` : ''}. If all are approved: about ${(base + repeats).toLocaleString()} advices, with ${completions.toLocaleString()} completions, ${reversals.toLocaleString()} reversals and ${repeats.toLocaleString()} sent twice. Declined ones aren't queued.`
+    : 'Add at least one transaction.';
+}
+
+function siReleasePlanLine() {
+  const r = siReleaseBody(), s = siLast && siLast.summary;
+  const left = s ? s.advices - s.sent : 0;
+  if (!left) { $('siReleasePlan').textContent = ''; return; }
+  const secs = Math.ceil(left / Math.max(1, r.rate));
+  let t = `${left.toLocaleString()} advices to send. At ${r.rate} a second it takes at least ${siDuration(secs * 1000)}`;
+  if (r.targetMinutes > 0) {
+    const budget = Math.floor(r.targetMinutes * 60000 * r.inFlight / left);
+    t += secs > r.targetMinutes * 60
+      ? `: longer than the ${r.targetMinutes} minutes allowed. Raise the speed.`
+      : `. To finish within ${r.targetMinutes} min with ${r.inFlight} in flight, the New Flexcube Core must answer each in ${budget.toLocaleString()} ms or less on average.`;
+  } else t += '.';
+  $('siReleasePlan').textContent = t;
+}
+
+// The numbers are remembered on this PC so a large cutover plan needn't be typed again (account numbers aren't).
+const SI_FIELDS = ['siDays', 'siNoRecord', 'siPerTxn', 'siDaily', 'siCntWITHDRAWAL', 'siCntPURCHASE', 'siCntPREAUTH', 'siCntTRANSFER', 'siComplete', 'siReverse', 'siRepeat',
+  'siMin', 'siMax', 'siF7', 'siLegacyRev', 'siForceOver', 'siSampleInq', 'siSampleAdv', 'siRate', 'siInFlight', 'siTarget', 'siOnlineInq'];
+function siRestore() {
+  const saved = store.get('siForm', null);
+  if (saved && typeof saved === 'object') for (const id of SI_FIELDS) if (saved[id] != null && $(id)) $(id).value = saved[id];
+}
+function siRemember() {
+  const v = {};
+  for (const id of SI_FIELDS) if ($(id)) v[id] = $(id).value;
+  store.set('siForm', v);
+}
+
+function siTargetLine() {
+  const t = activeTarget();
+  $('siTargetLine').textContent = t ? `→ ${targetLabel(t)}` : '—';
+  $('siConnectTo').textContent = siLast ? siLast.target : t ? targetLabel(t) : '—';
+  if (t && !$('siPbfAccounts').value.trim()) {
+    const roles = Object.entries(t.accounts || {}).filter(([, v]) => v).map(([k]) => '@' + k).slice(0, 4);
+    if (roles.length) $('siPbfAccounts').value = roles.join('\n');
+  }
+}
+
+async function siBusy(btn, fn) {
+  const b = $(btn);
+  b.disabled = true;
+  try { await fn(); } catch (e) { toast(e.message, 'bad'); } finally { b.disabled = false; }
+}
+
+async function siCreate() {
+  const t = activeTarget();
+  if (!t) { toast('Add a target first', 'bad'); return; }
+  if (siLast && siLast.status === 'OPEN' && !confirm(`Start a new rehearsal? ${siLast.id} stays in the list below.`)) return;
+  await siBusy('siCreate', async () => {
+    const d = await uatApi('/api/standin/run', { targetId: t.id, ...siRules(), tester: ($('uatTester') && $('uatTester').value.trim()) || '' });
+    siRunId = d.runId;
+    store.set('siRun', siRunId);
+    await siPoll();
+    siLoadHistory();
+  });
+}
+
+async function siStep(btn, action, body, confirmText) {
+  if (!siRunId) return;
+  if (confirmText && !confirm(confirmText)) return;
+  await siBusy(btn, async () => {
+    await uatApi('/api/standin/runs', { id: siRunId, action, ...(body || {}) });
+    await siPoll();
+  });
+}
+
+/** "account,available_balance[,currency]" per line; a header line is skipped, quotes and thousands separators allowed. */
+function siParseCsv(text) {
+  const rows = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const cells = [];
+    let cur = '', quoted = false;
+    for (const ch of line) {
+      if (ch === '"') quoted = !quoted;
+      else if (!quoted && (ch === ',' || ch === ';' || ch === '\t')) { cells.push(cur); cur = ''; }
+      else cur += ch;
+    }
+    cells.push(cur);
+    const account = (cells[0] || '').trim().replace(/^'/, '');
+    const available = (cells[1] || '').trim().replace(/[\s,](?=\d{3}(\D|$))/g, '');
+    if (!rows.length && !/^-?\d+(\.\d+)?$/.test(available)) continue;   // the header
+    const row = { account, available };
+    if ((cells[2] || '').trim()) row.currency = cells[2].trim();
+    rows.push(row);
+  }
+  return rows;
+}
+
+async function siPoll() {
+  clearTimeout(siTimer);
+  if (!siRunId) { siLast = null; siRender(null); return; }
+  try {
+    const run = await uatApi('/api/standin/run?id=' + encodeURIComponent(siRunId) + ($('siProblems').checked ? '&problems=1' : ''));
+    siLast = run;
+    siRender(run);
+    const busy = run.status === 'RUNNING' || ['waiting', 'checking'].includes(run.moneyStatus);
+    if (busy && !$('viewStandin').hidden) siTimer = setTimeout(siPoll, 1500);
+    else siLoadHistory();
+  } catch (e) {
+    if (/Unknown/.test(e.message)) { siRunId = null; store.set('siRun', null); siLast = null; siRender(null); }
+  }
+}
+
+function siTile(label, value, cls) {
+  return `<div class="si-tile ${cls || ''}"><b>${escapeHtml(String(value == null ? '–' : value))}</b><span>${escapeHtml(label)}</span></div>`;
+}
+
+function siStatusLabel(run) {
+  if (run.status === 'RUNNING') return { text: { samples: 'SENDING SAMPLES', release: 'RELEASING', online: 'GOING ONLINE' }[run.busy] || 'RUNNING', cls: 'warn' };
+  if (run.status === 'DONE') return { text: run.kind === 'rehearsal' ? 'FULLY ONLINE' : 'DONE', cls: 'ok' };
+  if (run.status === 'INTERRUPTED' || run.status === 'ERROR') return { text: run.status, cls: 'bad' };
+  if (run.kind !== 'rehearsal') return { text: run.status, cls: 'neutral' };
+  return { text: (run.step || 0) <= 3 ? 'IN STAND-IN' : `STEP ${run.step} OF 8`, cls: 'neutral' };
+}
+
+function siRenderSteps(run) {
+  const open = run && run.status !== 'DONE' && run.status !== 'INTERRUPTED' && run.kind === 'rehearsal';
+  const step = run && run.kind === 'rehearsal' ? run.step || 0 : 0;
+  const busy = !!(run && run.status === 'RUNNING');
+  const current = open ? Math.min(8, step + 1) : run ? 0 : 1;
+  $('siNew').hidden = !run;
+  document.querySelectorAll('#siSteps .si-step').forEach(li => {
+    const n = Number(li.dataset.step), done = !!run && n <= step, isCurrent = n === current;
+    li.classList.toggle('done', done);
+    li.classList.toggle('current', isCurrent);
+    li.classList.toggle('locked', !done && !isCurrent);
+    li.querySelector('.si-step-body').hidden = !isCurrent;
+    const last = done && run.log ? [...run.log].reverse().find(l => l.step === n) : null;
+    li.querySelector('[data-done]').textContent = last ? last.text : '';
+  });
+  for (const id of ['siPbfSkip', 'siPbfCore', 'siPbfUpload', 'siPost', 'siConnect', 'siSampleSkip', 'siSamples', 'siRelease', 'siOnline']) $(id).disabled = busy;
+  const ms = run && run.moneyStatus;
+  $('siReconNote').textContent = current !== 7 ? 'Runs by itself after the release: every RRN, each account (before + approved in stand-in = after) and the switch\'s totals against the GLs.'
+    : run.status === 'RUNNING' ? 'Waiting for the release to finish…'
+    : ms === 'waiting' ? 'Giving the New Flexcube Core 30 seconds to post, then reconciling…'
+    : ms === 'checking' ? 'Reconciling every RRN, account and GL…' + (run.moneyProgress ? ` (${run.moneyProgress})` : '')
+    : ms === 'error' ? 'The reconciliation failed: ' + (run.moneyError || '') + '. Press Check money again.'
+    : 'Press Check money again to reconcile.';
+  if (run) $('siConnectTo').textContent = run.target || '—';
+  siReleasePlanLine();
+}
+
+function siInquiryTable(title, rows) {
+  if (!rows || !rows.length) return '';
+  return `<h3 class="si-sub">${escapeHtml(title)}</h3><div class="table-wrap"><table class="tbl"><thead><tr><th>Account</th><th>Reply</th><th class="num">Ledger</th><th class="num">Available</th><th class="num">Expected</th><th>Result</th></tr></thead><tbody>`
+    + rows.map(r => `<tr><td class="mono">${escapeHtml(r.account)}</td><td><span class="pill ${r.ok ? 'ok' : 'bad'} code" title="${escapeHtml(CODE_DESC[r.code] || r.error || '')}">${escapeHtml(r.code || '--')}</span></td>
+      <td class="num">${siAmt(r.ledger)}</td><td class="num">${siAmt(r.available)}</td><td class="num">${siAmt(r.expected)}</td>
+      <td class="si-wrap ${r.match === true ? 'ok-t' : r.match === false ? 'warn-t' : 'muted'}">${escapeHtml(r.note || '')}</td></tr>`).join('')
+    + '</tbody></table></div>';
+}
+
+function siRender(run) {
+  siRenderSteps(run);
+  const parts = ['siLog', 'siSwitchBox', 'siConnectBox', 'siTiles', 'siMoney', 'siAccountsBox', 'siGlBox', 'siOnlineBox'];
+  if (!run) {
+    $('siTitle').textContent = 'No rehearsal yet';
+    $('siStatus').textContent = 'IDLE';
+    $('siStatus').className = 'pill neutral';
+    $('siSub').textContent = 'Start with step 1 on the left. Each step waits for you, as it would on the night.';
+    for (const id of parts) $(id).innerHTML = '';
+    for (const id of ['siProgress', 'siStop', 'siRecheck', 'siReport', 'siCsv', 'siFilterRow', 'siTableWrap']) $(id).hidden = true;
+    return;
+  }
+  const s = run.summary || {}, ms = run.moneySummary, running = run.status === 'RUNNING', step = run.kind === 'rehearsal' ? run.step || 0 : 8;
+  const st = siStatusLabel(run);
+  $('siTitle').textContent = run.id;
+  $('siStatus').textContent = st.text;
+  $('siStatus').className = 'pill ' + st.cls;
+  $('siSub').textContent = `${run.target} · started ${String(run.startedAt || '').slice(0, 19)}${run.tester ? ' · ' + run.tester : ''}`
+    + (run.queueLost ? ' · The agent restarted before the queue was released: post the transactions to the switch again.' : '')
+    + (run.status === 'INTERRUPTED' ? ' · The agent restarted during this rehearsal: start a new one.' : '');
+  $('siProgress').hidden = !(running && (run.busy === 'release' || run.busy === 'samples'));
+  $('siBar').style.width = (s.advices ? Math.round(100 * s.sent / s.advices) : 0) + '%';
+  $('siStop').hidden = !running;
+  const link = (fmt) => AGENT.link('/api/standin/report?id=' + encodeURIComponent(run.id) + (fmt ? '&format=' + fmt : ''));
+  const hasData = step >= 3;
+  $('siReport').hidden = running || !hasData; $('siReport').href = link();
+  $('siCsv').hidden = running || !hasData; $('siCsv').href = link('csv');
+  $('siRecheck').hidden = running || step < 5 || run.moneyStatus === 'off' || ['waiting', 'checking'].includes(run.moneyStatus);
+
+  // Timeline
+  const log = run.log || [];
+  $('siLog').innerHTML = log.map((l, i) => `<li class="${i === log.length - 1 ? 'last' : ''}"><span class="mono">${escapeHtml(String(l.at || '').slice(11, 19))}</span><b>${l.step}. ${escapeHtml(l.title)}</b><span>${escapeHtml(l.text)}</span></li>`).join('');
+
+  // Step 2-3: the balance file and the switch's decisions
+  let sw = '';
+  const p = run.pbf;
+  if (p && p.source !== 'none') {
+    sw += `<details class="si-details"><summary>Positive balance file: ${siFmt(p.accounts)} accounts, available ${siAmt(p.total)}${p.source === 'core' ? ' (from the New Flexcube Core)' : ''}</summary>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>Account</th><th class="num">Available</th><th>Currency</th></tr></thead><tbody>${(p.sample || []).map(r => `<tr><td class="mono">${escapeHtml(r.account)}</td><td class="num">${siAmt(r.available)}</td><td class="mono">${escapeHtml(r.currency || '')}</td></tr>`).join('')}</tbody></table></div>
+      ${p.accounts > (p.sample || []).length ? `<p class="summary-hint">Showing ${(p.sample || []).length} of ${siFmt(p.accounts)}</p>` : ''}</details>`;
+  }
+  const sd = run.standin;
+  if (sd) {
+    sw += '<h3 class="si-sub">At the switch during stand-in</h3><div class="si-tiles">' + siTile('Transactions', siFmt(sd.transactions)) + siTile('Approved', siFmt(sd.approved), 'ok')
+      + siTile('Approved amount', siAmt(sd.approvedAmount)) + siTile('Declined', siFmt(sd.declined), sd.declined ? 'warn' : '') + siTile('Advices queued', siFmt(sd.queued)) + '</div>';
+    const why = Object.entries(sd.declinedBy || {}).map(([c, n]) => `<span class="pill neutral code">${escapeHtml(c)}</span> ${escapeHtml(SI_REASONS[c] || '')}: ${siFmt(n)}`).join(' · ');
+    const extras = [sd.legacyReversals ? `${siFmt(sd.legacyReversals)} reversals of Legacy Core withdrawals` : '', sd.migratedHolds ? `${siFmt(sd.migratedHolds)} completions of migrated holds` : '',
+      sd.forceAccount ? `force post: ${sd.forceAccount} withdraws ${siAmt(sd.forceAmount)}, over its balance` : ''].filter(Boolean).join(' · ');
+    if (why || extras) sw += `<p class="si-note">${why}${why && extras ? '<br>' : ''}${escapeHtml(extras)}</p>`;
+    const dec = run.declined || [];
+    if (dec.length) sw += `<details class="si-details"><summary>Declined in stand-in (${siFmt(run.declinedTotal)})</summary><div class="table-wrap"><table class="tbl"><thead><tr><th>Happened</th><th>Type</th><th>RRN</th><th>Account</th><th class="num">Amount</th><th>Reason</th></tr></thead><tbody>`
+      + dec.map(d => `<tr><td class="mono">${escapeHtml(String(d.happened || '').slice(5, 16))}</td><td>${escapeHtml(d.label)}</td><td class="mono">${escapeHtml(d.rrn)}</td><td class="mono">${escapeHtml(d.account)}</td><td class="num">${escapeHtml(d.amount)}</td><td class="si-wrap"><span class="pill neutral code">${escapeHtml(d.code)}</span> ${escapeHtml(d.reason || '')}</td></tr>`).join('')
+      + `</tbody></table></div>${run.declinedTotal > dec.length ? `<p class="summary-hint">Showing ${dec.length} of ${siFmt(run.declinedTotal)}; the CSV has all of them</p>` : ''}</details>`;
+  }
+  $('siSwitchBox').innerHTML = sw;
+
+  // Step 4-5: connect and samples
+  let cb = '';
+  const c = run.connect;
+  if (c) cb += `<h3 class="si-sub">New Flexcube Core</h3><p class="si-note">${c.ok ? '<b class="ok-t">Connected</b>' : '<b class="bad-t">No answer</b>'}: sign-on ${escapeHtml(c.request || '')} → ${escapeHtml(c.mti || '')} ${escapeHtml(c.code || '')} ${c.ok ? 'in ' + c.latencyMs + ' ms' : escapeHtml(c.error || '')}</p>`;
+  cb += siInquiryTable('Samples: balance inquiries against the positive balance file', run.sampleInquiries);
+  if (run.sampleAdvices) cb += `<p class="si-note">${run.sampleAdvices} sample advices sent: the first rows in the list below.</p>`;
+  $('siConnectBox').innerHTML = cb;
+
+  // Step 6: the release
+  const t = run.timing || {};
+  let tiles = '';
+  if (step >= 5 || running) {
+    tiles = siTile('Advices sent', `${siFmt(s.sent || 0)}/${siFmt(s.advices || 0)}`) + siTile('Acknowledged', siFmt(s.acknowledged), 'ok')
+      + siTile('Declined by the core', siFmt(s.rejected), s.rejected ? 'bad' : '') + siTile('No answer', siFmt(s.errors), s.errors ? 'bad' : '') + siTile('Sent twice', siFmt(s.repeats));
+    if (t.elapsedMs != null) {
+      const releasing = running && run.busy === 'release';
+      tiles += siTile(releasing ? 'Release elapsed' : 'Release took', siDuration(t.elapsedMs || 0)) + siTile('Per second', t.perSecond == null ? '–' : t.perSecond);
+      if (t.latencyMedianMs != null) tiles += siTile('Core answer, median', t.latencyMedianMs + ' ms') + siTile('95% answered within', t.latencyP95Ms + ' ms');
+      if (t.targetMinutes > 0 && t.withinTarget != null) {
+        tiles += releasing
+          ? siTile(`Projected total, limit ${t.targetMinutes} min`, '~' + siDuration(t.projectedMs || 0), t.withinTarget ? 'ok' : 'bad')
+          : t.sent >= t.advices ? siTile(`Within ${t.targetMinutes} min`, t.withinTarget ? 'Yes' : 'No, +' + siDuration(t.elapsedMs - t.targetMinutes * 60000), t.withinTarget ? 'ok' : 'bad') : '';
+      }
+    }
+    if (ms) {
+      tiles += siTile('Posted once', siFmt(ms.postedOnce), 'ok') + siTile('Posted more than once', siFmt(ms.doublePosted), ms.doublePosted ? 'bad' : '')
+        + siTile('Not posted', siFmt(ms.notPosted), ms.notPosted ? 'bad' : '') + siTile('Reversals missing', siFmt(ms.reversalMissing), ms.reversalMissing ? 'bad' : '')
+        + siTile('Holds missing', siFmt(ms.blockMissing), ms.blockMissing ? 'warn' : '') + siTile('Value date differs', siFmt(ms.valueDateDiffers), ms.valueDateDiffers ? 'warn' : '');
+      if (ms.legacyCredited || (run.standin && run.standin.legacyReversals)) tiles += siTile('Legacy Core withdrawals credited back', siFmt(ms.legacyCredited), 'ok');
+      if (ms.holdReleased || ms.holdNotReleased) tiles += siTile('Migrated holds released', siFmt(ms.holdReleased), 'ok') + siTile('Migrated holds still open', siFmt(ms.holdNotReleased), ms.holdNotReleased ? 'bad' : '');
+    }
+  }
+  $('siTiles').innerHTML = tiles;
+  const MONEY = {
+    off: 'Money check off: set up the bank database for this target (Target → Bank database) to reconcile postings, accounts and GLs.',
+    pending: '',
+    waiting: 'Giving the New Flexcube Core 30 seconds to post before checking…',
+    checking: 'Checking every RRN in the bank database…' + (run.moneyProgress ? ` ${run.moneyProgress}` : ''),
+    interrupted: 'The money check was interrupted: press Check money again.',
+    error: 'Money check failed: ' + (run.moneyError || ''),
+  };
+  $('siMoney').innerHTML = step < 5 && !running ? ''
+    : run.moneyStatus === 'done' && ms
+    ? `<b class="${ms.fail ? 'bad-t' : ms.wait ? 'warn-t' : 'ok-t'}">${siFmt(ms.pass)} of ${siFmt(ms.transactions)} transactions reconciled</b>${ms.fail ? ` · ${siFmt(ms.fail)} with problems` : ''}${ms.wait ? ` · ${siFmt(ms.wait)} not posted yet: press Check money again in a few minutes` : ''} · checked ${escapeHtml(String(run.moneyCheckedAt || '').slice(11, 19))}`
+    : escapeHtml(MONEY[run.moneyStatus] || '');
+
+  // Step 7: accounts and GLs
+  let ab = '';
+  if (run.accounts) {
+    const sm = run.accountsSummary || {};
+    ab = `<h3 class="si-sub">Accounts: before + approved in stand-in = after</h3><p class="si-note"><b class="ok-t">${siFmt(sm.pass || 0)} balanced</b>${sm.fail ? ` · <b class="bad-t">${siFmt(sm.fail)} wrong</b>` : ''}${sm.warn ? ` · <b class="warn-t">${siFmt(sm.warn)} with other activity</b>` : ''}${sm.info ? ` · ${siFmt(sm.info)} without balances` : ''}</p>`
+      + '<div class="table-wrap"><table class="tbl"><thead><tr><th>Account</th><th class="num">Balance file</th><th class="num">Before</th><th class="num">Switch approved</th><th class="num">Posted</th><th class="num">After</th><th>Result</th></tr></thead><tbody>'
+      + run.accounts.map(a => `<tr><td class="mono">${escapeHtml(a.account)}</td><td class="num">${siAmt(a.pbf)}</td><td class="num">${siAmt(a.before && a.before.current)}</td>
+        <td class="num">${siAmt(a.expectedLedger)}</td><td class="num">${siAmt(a.posted)}</td><td class="num">${siAmt(a.after && a.after.current)}</td>
+        <td class="si-wrap"><span class="pill ${a.status === 'PASS' ? 'ok' : a.status === 'FAIL' ? 'bad' : a.status === 'WARN' ? 'warn' : 'neutral'}">${escapeHtml(a.status)}</span> <span class="muted">${escapeHtml((a.notes || []).join('; '))}</span></td></tr>`).join('')
+      + `</tbody></table></div>${run.accountsTotal > run.accounts.length ? `<p class="summary-hint">Showing ${run.accounts.length} of ${siFmt(run.accountsTotal)}, problems first; the report has more</p>` : ''}`;
+  } else if (run.moneyStatus === 'done' && run.balancesBeforeError) {
+    ab = `<p class="si-note">No account balances from before the release: ${escapeHtml(run.balancesBeforeError)}</p>`;
+  }
+  $('siAccountsBox').innerHTML = ab;
+  const gl = run.glTotals || [];
+  $('siGlBox').innerHTML = gl.length ? '<h3 class="si-sub">Switch totals against the GLs</h3><div class="table-wrap"><table class="tbl"><thead><tr><th>Transactions</th><th class="num">RRNs</th><th class="num">Switch total</th><th>GLs (net credit)</th><th>Result</th></tr></thead><tbody>'
+    + gl.map(g => `<tr><td>${escapeHtml(g.label)}</td><td class="num">${siFmt(g.rrns)}</td><td class="num">${siAmt(g.switchTotal)}</td>
+      <td class="mono">${(g.gls || []).map(x => `<div${x.matches ? ' class="ok-t"' : ''}>${escapeHtml(x.gl)}${x.name ? ' ' + escapeHtml(x.name) : ''}: ${siAmt(x.net)}</div>`).join('') || '<span class="muted">none</span>'}</td>
+      <td class="si-wrap"><span class="pill ${g.status === 'PASS' ? 'ok' : g.status === 'FAIL' ? 'bad' : 'neutral'}">${escapeHtml(g.status)}</span> <span class="muted">${escapeHtml(g.note || '')}</span></td></tr>`).join('')
+    + '</tbody></table></div>' : '';
+
+  // Step 8
+  $('siOnlineBox').innerHTML = siInquiryTable('Fully online: balance inquiries against the reconciled balances', run.onlineInquiries);
+
+  // Every advice
+  const money = run.money || {};
+  const problems = $('siProblems').checked;
+  const shown = new Set();
+  const rows = [];
+  for (const ev of (run.events || []).slice(0, SI_ROWS_MAX)) {
+    const v = money[ev.rrn];
+    const first = !shown.has(ev.rrn);
+    shown.add(ev.rrn);
+    const reply = ev.status === 'PENDING' ? '<span class="muted">queued</span>'
+      : `<span class="pill ${ev.status === 'ACK' ? 'ok' : 'bad'} code" title="${escapeHtml(ev.error || CODE_DESC[ev.actual] || '')}">${escapeHtml(ev.actual || ev.status)}</span>`;
+    rows.push(`<tr class="${ev.repeat ? 'row-muted' : ''}">
+      <td class="num">${ev.seq}</td><td class="mono">${escapeHtml(String(ev.happened || '').slice(5, 16))}</td>
+      <td>${escapeHtml(ev.label)}</td><td class="mono">${escapeHtml(ev.mti)}</td><td class="mono">${escapeHtml(ev.rrn)}</td>
+      <td class="mono">${escapeHtml(ev.account || '')}${ev.to ? ' → ' + escapeHtml(ev.to) : ''}</td><td class="num">${escapeHtml(ev.amount || '')}</td>
+      <td>${reply}</td><td class="money">${first && v ? moneyPill(v, ev.rrn) : first && run.moneyStatus === 'done' ? '' : '<span class="muted">·</span>'}</td></tr>`);
+  }
+  const any = (run.eventsTotal || 0) > 0;
+  $('siRows').innerHTML = rows.join('') || `<tr><td colspan="9" class="muted">${problems ? 'No problems.' : 'Nothing queued.'}</td></tr>`;
+  $('siTableWrap').hidden = !any;
+  $('siFilterRow').hidden = !any;
+  const matched = run.eventsMatched != null ? run.eventsMatched : rows.length, from = run.eventsFrom || 0, all = run.eventsTotal || matched;
+  $('siShown').textContent = problems
+    ? (matched > rows.length ? `Showing ${rows.length.toLocaleString()} of ${matched.toLocaleString()} problems; the CSV has all of them` : `${matched.toLocaleString()} problem${matched === 1 ? '' : 's'}`)
+    : all > rows.length ? `Advices ${(from + 1).toLocaleString()}–${(from + rows.length).toLocaleString()} of ${all.toLocaleString()} in the queue; the CSV has all of them` : `${all.toLocaleString()} advice${all === 1 ? '' : 's'} in the queue`;
+}
+
+async function siLoadHistory() {
+  try {
+    const { runs } = await uatApi('/api/standin/runs');
+    $('siHistory').innerHTML = runs.length ? runs.map(r => {
+      const s = r.summary || {}, ms = r.moneySummary, t = r.timing || {};
+      const reached = r.kind === 'rehearsal' ? (r.status === 'DONE' ? 'Fully online' : `Step ${r.step || 0} of 8`) : 'Replay';
+      const result = r.status === 'RUNNING' ? '<span class="pill warn">sending</span>'
+        : ms ? `<span class="pill ${ms.fail ? 'bad' : ms.wait ? 'warn' : 'ok'}">${siFmt(ms.pass)}/${siFmt(ms.transactions)} reconciled</span>`
+        : `<span class="muted">${escapeHtml(r.status)}</span>`;
+      const took = t.elapsedMs ? `<span class="${t.withinTarget === false ? 'bad-t' : ''}">${siDuration(t.elapsedMs)}</span>` : '';
+      return `<tr data-id="${escapeHtml(r.id)}"><td class="mono">${escapeHtml(r.id)}</td><td>${escapeHtml(r.target || '')}</td>
+        <td class="mono">${escapeHtml(String(r.startedAt || '').slice(0, 16))}</td><td>${escapeHtml(reached)}</td><td class="num">${siFmt(s.advices || 0)}</td><td class="num">${took}</td><td>${result}</td>
+        <td class="acc-actions"><button type="button" class="link-btn" data-si="open">Open</button>${r.status === 'RUNNING' ? '' : '<button type="button" class="link-btn danger" data-si="delete">Delete</button>'}</td></tr>`;
+    }).join('') : '<tr><td colspan="8" class="muted">No rehearsals yet.</td></tr>';
+  } catch (e) { /* not Enterprise: step 1 explains */ }
+}
+
+$('siCreate').addEventListener('click', siCreate);
+$('siNew').addEventListener('click', () => { siRunId = null; store.set('siRun', null); siLast = null; siRender(null); });
+$('siPbfTemplate').addEventListener('click', (e) => {
+  e.preventDefault();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['account,available_balance,currency\r\n000100000001,1500.00,840\r\n000100000002,250.75,840\r\n'], { type: 'text/csv' }));
+  a.download = 'positive-balance-file.csv';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$('siPbfUpload').addEventListener('click', async () => {
+  const f = $('siPbfFile').files[0];
+  if (!f) { toast('Choose the positive balance file first', 'bad'); return; }
+  const rows = siParseCsv(await f.text());
+  if (!rows.length) { toast('No accounts found in ' + f.name, 'bad'); return; }
+  await siStep('siPbfUpload', 'pbf', { source: 'file', rows });
+});
+$('siPbfCore').addEventListener('click', () => siStep('siPbfCore', 'pbf', { source: 'core', accounts: siLines('siPbfAccounts') }));
+$('siPbfSkip').addEventListener('click', () => siStep('siPbfSkip', 'pbf', { source: 'none' }));
+$('siPost').addEventListener('click', () => siStep('siPost', 'post', siPostBody()));
+$('siConnect').addEventListener('click', () => siStep('siConnect', 'connect'));
+$('siSamples').addEventListener('click', () => {
+  const inq = siNum('siSampleInq'), adv = siNum('siSampleAdv');
+  siStep('siSamples', 'samples', { inquiries: inq, advices: adv },
+    `Send ${inq} balance inquir${inq === 1 ? 'y' : 'ies'} and the first ${adv} advice${adv === 1 ? '' : 's'} to ${siLast ? siLast.target : 'the New Flexcube Core'}?${adv ? ' The advices post real money.' : ''}`);
+});
+$('siSampleSkip').addEventListener('click', () => siStep('siSampleSkip', 'samples', { inquiries: 0, advices: 0 }));
+$('siRelease').addEventListener('click', () => {
+  const s = siLast && siLast.summary, left = s ? s.advices - s.sent : 0;
+  siStep('siRelease', 'release', siReleaseBody(), `Release ${left.toLocaleString()} advices to ${siLast ? siLast.target : 'the New Flexcube Core'}? They are real messages: the core will post them.`);
+});
+$('siOnline').addEventListener('click', () => siStep('siOnline', 'online', { inquiries: siNum('siOnlineInq') }));
+$('siStop').addEventListener('click', async () => { try { await uatApi('/api/standin/runs', { id: siRunId, action: 'stop' }); } catch (e) { toast(e.message, 'bad'); } });
+$('siRecheck').addEventListener('click', async () => {
+  try { await uatApi('/api/standin/runs', { id: siRunId, action: 'recheck' }); siPoll(); } catch (e) { toast(e.message, 'bad'); }
+});
+$('siProblems').addEventListener('change', siPoll);
+$('siHistory').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-si]');
+  if (!b) return;
+  const id = b.closest('tr').dataset.id;
+  if (b.dataset.si === 'open') { siRunId = id; store.set('siRun', id); siPoll(); return; }
+  if (!confirm(`Delete rehearsal ${id}? Its record and reconciliation are removed from this PC.`)) return;
+  try {
+    await uatApi('/api/standin/runs', { id, action: 'delete' });
+    if (siRunId === id) { siRunId = null; store.set('siRun', null); siLast = null; siRender(null); }
+    siLoadHistory();
+  } catch (err) { toast(err.message, 'bad'); }
+});
+document.querySelector('.si-setup').addEventListener('input', () => { siPlanLine(); siReleasePlanLine(); siRemember(); });
+siRestore();
 
 // ---------- UAT: case library ----------
 const ACTION_NAMES = {
@@ -1339,6 +1761,7 @@ $('caseDeleteBtn').addEventListener('click', async () => {
 });
 
 function renderUatTarget() {
+  if ($('siTargetLine') && !$('viewStandin').hidden) siTargetLine();
   if (!$('uatTargetLine')) return;
   const t = activeTarget();
   $('uatTargetLine').textContent = t ? `→ ${targetLabel(t)}` : '—';
@@ -2348,6 +2771,8 @@ function renderPlan() {
   b.className = 'plan-badge p-' + license.plan;
   b.title = license.expires ? `${name} plan until ${license.expires}` : `${name} plan`;
   document.querySelector('.mode-tab[data-mode="bundle"]').classList.toggle('locked', !can('bundles'));
+  document.querySelector('.view-tab[data-view="standin"]').classList.toggle('locked', !can('standin'));
+  $('siLock').hidden = can('standin');
   $('bundleLock').hidden = can('bundles') || mode !== 'bundle';
   const lim = license.limits || {};
   $('freeLimits').hidden = can('unlimited');
@@ -2373,7 +2798,7 @@ function renderPlanDialog() {
   const lim = license.limits || {};
   $('planFeatures').innerHTML = Object.entries(names).map(([k, n]) => {
     const on = can(k);
-    const need = k === 'money' ? 'Enterprise' : 'Team';
+    const need = k === 'money' || k === 'standin' ? 'Enterprise' : 'Team';
     return `<li class="${on ? 'on' : 'off'}">${escapeHtml(n)}${on ? '' : ` <span class="muted">· ${need}</span>`}</li>`;
   }).join('') + (can('unlimited') ? '' : `<li class="note">Free load tests: up to ${lim.count} per run, ${lim.concurrency} at once. UAT: up to ${lim.uatCases} cases per run.</li>`);
   $('planCodeForm').hidden = !AGENT.hosted;
@@ -2406,7 +2831,7 @@ const paddleCfg = () => (window.SWITCHPROOF_CONFIG || {}).paddle || null;
 const PLAN_RANK = { free: 0, team: 1, enterprise: 2, developer: 3 };
 const OFFERS = {
   team: 'Unlimited load tests, bundles, full UAT runs, printable reports and every ISO 8583 format.',
-  enterprise: 'Everything in Team, plus money checks: blocks, postings and balances read from the bank database.',
+  enterprise: 'Everything in Team, plus money checks (blocks, postings and balances read from the bank database) and stand-in rehearsals of a core cutover.',
 };
 const prices = {};          // plan -> "US$100.00 / month · 7-day free trial", from Paddle
 let paddleLoading = null, buying = null;

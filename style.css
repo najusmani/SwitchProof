@@ -1440,3 +1440,49 @@ body.doc-page { background: var(--bg); color: var(--text); min-height: 100vh; di
 .deal-close:hover { color: var(--text); background: color-mix(in srgb, var(--ok) 12%, transparent); }
 @media (max-width: 640px) { .deal-bar { flex-wrap: wrap; padding: 9px 16px; } .deal-text { flex-basis: calc(100% - 40px); } }
 .cd-steps input.s-ofrrn { min-width: 118px; width: 118px; }
+
+/* ============ Stand-in simulation ============ */
+.si-layout { display: grid; grid-template-columns: minmax(340px, 440px) minmax(0, 1fr); gap: 24px; padding: 24px 28px 32px; align-items: start; }
+.si-history { grid-column: 1 / -1; }
+.si-lead { font-size: 13px; color: var(--muted); line-height: 1.55; margin: 0 0 14px; }
+.si-h { font: 500 10.5px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 6px 0 8px; }
+.si-setup select, .si-setup textarea { width: 100%; }
+.si-setup .field-row { align-items: end; }
+.si-plan { font-size: 12.5px; color: var(--muted); margin: 6px 0 12px; line-height: 1.5; }
+.si-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.si-progress { height: 3px; background: var(--border); margin: 10px 0 14px; }
+.si-progress > div { height: 100%; width: 0; background: var(--accent); transition: width 0.4s; }
+.si-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); border-top: 1px solid var(--border); border-left: 1px solid var(--border); margin: 12px 0; }
+.si-tile { padding: 10px 12px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); min-width: 0; }
+.si-tile b { display: block; font: 400 24px/1.1 var(--serif); }
+.si-tile span { display: block; margin-top: 4px; font: 500 10px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.si-tile.ok b { color: var(--ok); } .si-tile.bad b { color: var(--bad); } .si-tile.warn b { color: var(--warn); }
+.si-money { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+.si-filter { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0 0 8px; font-size: 12.5px; }
+.si-table td.money { white-space: normal; min-width: 160px; }
+.view-tab.locked::after { content: ' 🔒'; font-size: 10px; }
+/* The rehearsal's steps */
+.si-steps { list-style: none; margin: 4px 0 0; padding: 0; }
+.si-step { border-top: 1px solid var(--border); padding: 10px 0; }
+.si-step:first-child { border-top: 0; padding-top: 2px; }
+.si-step-head { display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; }
+.si-step-head b { font-weight: 500; font-size: 13.5px; }
+.si-num { font: 500 11px var(--mono); width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border-strong); display: inline-flex; align-items: center; justify-content: center; flex: none; color: var(--muted); }
+.si-step.current .si-num { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.si-step.done .si-num { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+.si-step.locked { opacity: 0.55; }
+.si-done { flex-basis: 100%; margin: 3px 0 0 30px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.si-done:empty { display: none; }
+.si-step-body { margin: 12px 0 4px 30px; }
+.si-note { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin: 0 0 10px; }
+.si-log { list-style: none; margin: 10px 0 14px; padding: 0; border-left: 2px solid var(--border); }
+.si-log:empty { display: none; }
+.si-log li { display: grid; grid-template-columns: 62px 190px minmax(0, 1fr); gap: 8px; padding: 3px 0 3px 12px; font-size: 12.5px; color: var(--muted); }
+.si-log li.last { color: var(--text); }
+.si-log b { font-weight: 500; }
+.si-sub { font: 500 10.5px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+.si-details { margin: 6px 0 10px; }
+.si-details summary { cursor: pointer; font-size: 12.5px; margin: 4px 0 8px; }
+.si-result td.si-wrap { white-space: normal; min-width: 240px; line-height: 1.45; }
+@media (max-width: 700px) { .si-log li { grid-template-columns: 1fr; gap: 0; } .si-step-body, .si-done { margin-left: 0; } }
+@media (max-width: 960px) { .si-layout { grid-template-columns: 1fr; padding: 16px; } }

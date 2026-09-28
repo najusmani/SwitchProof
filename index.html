@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260927150214">
+<link rel="stylesheet" href="style.css?v=20260927211702">
 </head>
 <body>
 
@@ -20,6 +20,7 @@
   <nav class="views" role="tablist" aria-label="Workspace">
     <button type="button" role="tab" class="view-tab" data-view="load" aria-selected="true">Load test</button>
     <button type="button" role="tab" class="view-tab" data-view="uat" aria-selected="false">UAT</button>
+    <button type="button" role="tab" class="view-tab" data-view="standin" aria-selected="false" title="Rehearse a core banking cutover: stand-in, release the queue, reconcile (Enterprise)">Stand-in</button>
   </nav>
 
   <div class="target-wrap">
@@ -370,6 +371,165 @@
 </div>
 
 <!-- ================= UAT ================= -->
+<div id="viewStandin" hidden>
+<main class="si-layout">
+  <section class="card si-setup">
+    <div class="card-head"><h2>Cutover rehearsal</h2><span class="summary-hint" id="siTargetLine">—</span>
+      <div class="head-actions"><button type="button" class="btn sm ghost-plain" id="siNew" hidden>New rehearsal</button></div></div>
+    <p class="si-lead">The card switch runs in stand-in while no core is connected, then its queue goes to the New Flexcube Core.
+      SwitchProof plays the switch through each step and reconciles every transaction, account and GL.</p>
+    <ol class="si-steps" id="siSteps">
+      <li class="si-step" data-step="1">
+        <div class="si-step-head"><span class="si-num">1</span><b>Switch to stand-in</b><span class="si-done" data-done></span></div>
+        <div class="si-step-body">
+          <div class="field-row two">
+            <label class="field"><span>Days in stand-in</span><input type="number" id="siDays" min="1" max="14" value="3"></label>
+            <label class="field"><span>Accounts without a balance record</span><select id="siNoRecord"><option value="decline">Decline (91)</option><option value="approve">Approve within the limits</option></select></label>
+            <label class="field"><span>Stand-in limit <em>per transaction, 0 = none</em></span><input type="text" id="siPerTxn" value="1000.00" inputmode="decimal"></label>
+            <label class="field"><span>Stand-in limit <em>per account a day, 0 = none</em></span><input type="text" id="siDaily" value="0" inputmode="decimal"></label>
+          </div>
+          <div class="si-actions">
+            <span class="plan-hint" id="siLock" hidden>Stand-in simulations are part of the Enterprise plan.</span>
+            <button type="button" class="btn primary" id="siCreate">Switch to stand-in</button>
+          </div>
+        </div>
+      </li>
+      <li class="si-step" data-step="2">
+        <div class="si-step-head"><span class="si-num">2</span><b>Positive balance file</b><span class="si-done" data-done></span></div>
+        <div class="si-step-body">
+          <p class="si-note">The balances the switch decides on: the Legacy Core's at the cut-off. A CSV with one account a line:
+            <span class="mono">account,available_balance[,currency]</span> · <a href="#" id="siPbfTemplate">template</a></p>
+          <label class="field"><span>Upload the file</span><input type="file" id="siPbfFile" accept=".csv,.txt,text/csv"></label>
+          <label class="field"><span>Or take the New Flexcube Core's balances <em>for these accounts, one a line; @ROLE ok</em></span>
+            <textarea id="siPbfAccounts" rows="3" class="mono" placeholder="@ECD_SAV&#10;@ECD_CHK"></textarea></label>
+          <div class="si-actions">
+            <button type="button" class="btn sm ghost-plain" id="siPbfSkip">Skip: no file</button>
+            <button type="button" class="btn sm" id="siPbfCore">Take balances</button>
+            <button type="button" class="btn primary" id="siPbfUpload">Load the file</button>
+          </div>
+        </div>
+      </li>
+      <li class="si-step" data-step="3">
+        <div class="si-step-head"><span class="si-num">3</span><b>Transactions at the switch</b><span class="si-done" data-done></span></div>
+        <div class="si-step-body">
+          <p class="si-note">No core is connected: the switch approves or declines each one on its limits and the balance file, and queues what it approved.</p>
+          <div class="field-row two">
+            <label class="field"><span>ATM withdrawals <em>0220</em></span><input type="number" id="siCntWITHDRAWAL" min="0" max="20000" value="40"></label>
+            <label class="field"><span>POS purchases <em>0220</em></span><input type="number" id="siCntPURCHASE" min="0" max="20000" value="30"></label>
+            <label class="field"><span>POS pre-authorizations <em>0120</em></span><input type="number" id="siCntPREAUTH" min="0" max="20000" value="10"></label>
+            <label class="field"><span>Transfers <em>0220</em></span><input type="number" id="siCntTRANSFER" min="0" max="20000" value="0"></label>
+          </div>
+          <div class="field-row three">
+            <label class="field"><span>Pre-auths completed <em>%</em></span><input type="number" id="siComplete" min="0" max="100" value="70"></label>
+            <label class="field"><span>Reversed <em>0420, %</em></span><input type="number" id="siReverse" min="0" max="50" value="5"></label>
+            <label class="field"><span>Sent twice <em>0221/0121/0421, %</em></span><input type="number" id="siRepeat" min="0" max="50" value="5"></label>
+          </div>
+          <div class="field-row three">
+            <label class="field"><span>Amount from</span><input type="text" id="siMin" value="5.00" inputmode="decimal"></label>
+            <label class="field"><span>Amount to</span><input type="text" id="siMax" value="200.00" inputmode="decimal"></label>
+            <label class="field"><span>F7 transmission time</span><select id="siF7" title="F7 transmission date and time: when the advice is sent (as ISO defines it), or when the transaction happened"><option value="replay">Replay time</option><option value="original">Original time</option></select></label>
+          </div>
+          <label class="field"><span>Accounts <em>the balance file's, plus these (no balance record); @ROLE ok</em></span><textarea id="siAccounts" rows="2" class="mono" placeholder="optional"></textarea></label>
+          <p class="si-h">From before the cut-off, and force posting</p>
+          <div class="field-row three">
+            <label class="field" title="ATM withdrawals the Legacy Core approved just before the cut-off, reversed just after it: the New Flexcube Core never saw the original"><span>Reversals of Legacy Core withdrawals</span><input type="number" id="siLegacyRev" min="0" max="5000" value="0"></label>
+            <label class="field" title="One withdrawal the switch approves above the account's balance (a stale balance record): the advice must still post, into overdraft"><span>Force post <em>account</em></span><input type="text" id="siForceAcct" class="mono" placeholder="optional"></label>
+            <label class="field"><span>Over its balance by</span><input type="text" id="siForceOver" value="100.00" inputmode="decimal"></label>
+          </div>
+          <label class="field" title="Holds the migration created from the Legacy Core's open pre-authorizations; each gets a completion during stand-in"><span>Holds migrated from the Legacy Core <em>amount block number [RRN], one a line</em></span>
+            <textarea id="siHolds" rows="2" class="mono" placeholder="optional"></textarea></label>
+          <p class="si-plan" id="siPlan"></p>
+          <div class="si-actions"><button type="button" class="btn primary" id="siPost">Post to the switch</button></div>
+        </div>
+      </li>
+      <li class="si-step" data-step="4">
+        <div class="si-step-head"><span class="si-num">4</span><b>Connect the New Flexcube Core</b><span class="si-done" data-done></span></div>
+        <div class="si-step-body">
+          <p class="si-note">A sign-on (0800) to <span class="mono" id="siConnectTo">—</span>. Nothing else is sent yet.</p>
+          <div class="si-actions"><button type="button" class="btn primary" id="siConnect">Connect</button></div>
+        </div>
+      </li>
+      <li class="si-step" data-step="5">
+        <div class="si-step-head"><span class="si-num">5</span><b>Samples</b><span class="si-done" data-done></span></div>
+        <div class="si-step-body">
+          <p class="si-note">Balance inquiries show whether the migrated balances match the file; the first advices show the queue posts.</p>
+          <div class="field-row two">
+            <label class="field"><span>Balance inquiries</span><input type="number" id="siSampleInq" min="0" max="20" value="3"></label>
+            <label class="field"><span>Advices from the queue</span><input type="number" id="siSampleAdv" min="0" max="50" value="5"></label>
+          </div>
+          <div class="si-actions"><button type="button" class="btn sm ghost-plain" id="siSampleSkip">Skip</button><button type="button" class="btn primary" id="siSamples">Send samples</button></div>
+        </div>
+      </li>
+      <li class="si-step" data-step="6">
+        <div class="si-step-head"><span class="si-num">6</span><b>Release the queue</b><span class="si-done" data-done></span></div>
+        <div class="si-step-body">
+          <div class="field-row three">
+            <label class="field"><span>Speed <em>at most, a second</em></span><input type="number" id="siRate" min="1" max="100" value="5"></label>
+            <label class="field" title="How many advices the switch sends before it has the reply to the first: 1 = strictly one after another"><span>In flight</span><input type="number" id="siInFlight" min="1" max="10" value="1"></label>
+            <label class="field"><span>Must finish within <em>min</em></span><input type="number" id="siTarget" min="0" max="1440" value="60"></label>
+          </div>
+          <p class="si-plan" id="siReleasePlan"></p>
+          <div class="si-actions"><button type="button" class="btn primary" id="siRelease">Release the queue</button></div>
+        </div>
+      </li>
+      <li class="si-step" data-step="7">
+        <div class="si-step-head"><span class="si-num">7</span><b>Reconcile</b><span class="si-done" data-done></span></div>
+        <div class="si-step-body">
+          <p class="si-note" id="siReconNote">Runs by itself after the release: every RRN, each account (before + approved in stand-in = after) and the switch's totals against the GLs.</p>
+        </div>
+      </li>
+      <li class="si-step" data-step="8">
+        <div class="si-step-head"><span class="si-num">8</span><b>Fully online</b><span class="si-done" data-done></span></div>
+        <div class="si-step-body">
+          <p class="si-note">The switch leaves stand-in and live transactions go to the New Flexcube Core. Balance inquiries check what customers now see.</p>
+          <label class="field"><span>Balance inquiries</span><input type="number" id="siOnlineInq" min="0" max="20" value="5"></label>
+          <div class="si-actions"><button type="button" class="btn primary" id="siOnline">Go fully online</button></div>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="card si-result">
+    <div class="card-head">
+      <h2 id="siTitle">No rehearsal yet</h2>
+      <span class="pill neutral" id="siStatus">IDLE</span>
+      <div class="head-actions">
+        <button type="button" class="btn sm ghost-plain" id="siStop" hidden>Stop</button>
+        <button type="button" class="btn sm ghost-plain" id="siRecheck" hidden>Check money again</button>
+        <a class="btn sm ghost-plain" id="siReport" target="_blank" rel="noopener" hidden>Report</a>
+        <a class="btn sm ghost-plain" id="siCsv" hidden>CSV</a>
+      </div>
+    </div>
+    <p class="summary-hint" id="siSub">Start with step 1 on the left. Each step waits for you, as it would on the night.</p>
+    <div class="si-progress" id="siProgress" hidden><div id="siBar"></div></div>
+    <ol class="si-log" id="siLog"></ol>
+    <div id="siSwitchBox"></div>
+    <div id="siConnectBox"></div>
+    <div class="si-tiles" id="siTiles"></div>
+    <p class="si-money" id="siMoney"></p>
+    <div id="siAccountsBox"></div>
+    <div id="siGlBox"></div>
+    <div id="siOnlineBox"></div>
+    <div class="si-filter" id="siFilterRow" hidden>
+      <label class="chk"><input type="checkbox" id="siProblems"> <span>Problems only</span></label>
+      <span class="summary-hint" id="siShown"></span>
+    </div>
+    <div class="table-wrap" id="siTableWrap" hidden><table class="tbl si-table">
+      <thead><tr><th class="num">#</th><th>Happened</th><th>Advice</th><th>MTI</th><th>RRN</th><th>Account</th><th class="num">Amount</th><th>Reply</th><th>Money</th></tr></thead>
+      <tbody id="siRows"></tbody>
+    </table></div>
+  </section>
+
+  <section class="card si-history">
+    <div class="card-head"><h2>Rehearsals</h2></div>
+    <div class="table-wrap"><table class="tbl">
+      <thead><tr><th>Rehearsal</th><th>Target</th><th>Started</th><th>Reached</th><th class="num">Advices</th><th class="num">Release took</th><th>Result</th><th></th></tr></thead>
+      <tbody id="siHistory"><tr><td colspan="8" class="muted">No rehearsals yet.</td></tr></tbody>
+    </table></div>
+  </section>
+</main>
+</div>
+
 <div id="viewUat" hidden>
 <main class="uat-layout">
 
@@ -868,8 +1028,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20260927150214"></script>
-<script src="agent.js?v=20260927150214"></script>
-<script src="app.js?v=20260927150214"></script>
+<script src="config.js?v=20260927211702"></script>
+<script src="agent.js?v=20260927211702"></script>
+<script src="app.js?v=20260927211702"></script>
 </body>
 </html>
