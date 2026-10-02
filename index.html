@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260927214317">
+<link rel="stylesheet" href="style.css?v=20261001205611">
 </head>
 <body>
 
@@ -102,10 +102,12 @@
           <button type="button" class="mode-tab" role="tab" data-mode="single" aria-selected="true">Single type</button>
           <button type="button" class="mode-tab" role="tab" data-mode="bundle" aria-selected="false">Bundle</button>
         </div>
+        <button type="button" class="btn sm ghost-plain" id="typesOpen" title="Design your own transaction type from a built-in one">Your types</button>
       </div>
       <p class="hint bundle-only" hidden>A bundle mixes several transaction types in one run, in the shares you set. Click types to add or remove them.</p>
       <p class="plan-hint" id="bundleLock" hidden>Bundles are part of the Team plan: you can set one up here, but running it needs Team.</p>
       <div class="type-grid" id="typeGrid" role="radiogroup" aria-label="Transaction type"></div>
+      <label class="field src-pick" id="srcPickRow"><span>Source <em>whose card, which acquirer</em></span><select id="srcPick"></select></label>
       <div class="bundle" id="bundleBox" hidden>
         <div class="bundle-presets">
           <span class="format-label">Presets</span>
@@ -223,6 +225,10 @@
         <textarea id="pansText" rows="2" spellcheck="false" placeholder="4000000000000002"></textarea>
       </label>
       <div class="sample-note" id="sampleWarn" hidden></div>
+      <div class="src-summary">
+        <div><b>Sources</b> <span class="hint" id="srcSummary">none yet</span></div>
+        <button type="button" class="btn sm" id="srcEdit">Edit sources</button>
+      </div>
     </details>
 
     <div class="fire-bar">
@@ -634,7 +640,7 @@
     </div>
     <div class="table-wrap">
       <table class="tbl cd-steps">
-        <thead><tr><th>#</th><th>Action</th><th>From</th><th>To</th><th>Amount</th><th>Ccy</th><th>Settle amt</th><th title="Settle / Reverse: the RRN of the transaction to act on. Blank = the latest approved step above">Of RRN</th><th>Card (opt.)</th><th title="Processing code override">Proc</th><th title="Remote on-us: sent with the target's remote acquirer">Remote</th><th>Expect</th><th></th></tr></thead>
+        <thead><tr><th>#</th><th>Action</th><th>From</th><th>To</th><th>Amount</th><th>Ccy</th><th>Settle amt</th><th title="Settle / Reverse: the RRN of the transaction to act on. Blank = the latest approved step above">Of RRN</th><th title="Where it comes from: the target's sources (Message defaults)">Source</th><th>Card (opt.)</th><th title="Processing code override">Proc</th><th title="Remote on-us: sent with the target's remote acquirer">Remote</th><th>Expect</th><th></th></tr></thead>
         <tbody id="cdSteps"></tbody>
       </table>
     </div>
@@ -914,6 +920,97 @@
   </form>
 </dialog>
 
+<dialog class="fb-dlg src-dlg" id="srcDlg" aria-labelledby="srcTitle">
+  <div class="dlg-head">
+    <div>
+      <p class="fb-eyebrow">Message defaults</p>
+      <h2 id="srcTitle">Sources for <span id="srcTarget">—</span></h2>
+    </div>
+    <button type="button" class="t-btn" id="srcClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="src-box">
+        <div class="src-head"><b>Sources</b><span class="hint">Where transactions come from: whose card (F2, by its BIN) and who acquired it (F32). Blank fields use the defaults above. Pick a source per run, bundle item or UAT step.</span></div>
+        <div class="table-wrap"><table class="tbl src-table">
+          <thead><tr><th>Name</th><th>Kind</th><th>Card <em>F2</em></th><th>Acquirer <em>F32</em></th><th>Forwarding <em>F33</em></th><th>Terminal <em>F41</em></th><th>MCC <em>F18</em></th><th>Entry <em>F22</em></th><th>Should post</th><th></th></tr></thead>
+          <tbody id="srcRows"></tbody>
+        </table></div>
+        <div class="src-actions">
+          <button type="button" class="btn sm" id="srcReady">Add the ready-made sources</button>
+          <button type="button" class="btn sm ghost-plain" id="srcAdd">Add source</button>
+          <span class="saved-note" id="srcSaved"></span>
+          <button type="button" class="btn sm primary" id="srcSave">Save sources</button>
+        </div>
+      </div>
+</dialog>
+
+<dialog class="fb-dlg types-dlg" id="typesDlg" aria-labelledby="tyTitle">
+  <div class="dlg-head">
+    <div>
+      <p class="fb-eyebrow">Transaction types</p>
+      <h2 id="tyTitle">Your own transaction types</h2>
+    </div>
+    <button type="button" class="t-btn" id="tyClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <p class="plan-hint" id="tyLock" hidden>Your own transaction types are part of the Team plan: you can design one here, but saving and sending it needs Team.</p>
+  <div class="ty-layout">
+    <aside class="ty-list">
+      <button type="button" class="btn sm" id="tyNew">New type</button>
+      <h3 class="acc-h">Yours</h3>
+      <ul class="ty-items" id="tyMine"></ul>
+      <h3 class="acc-h">Shipped with SwitchProof</h3>
+      <ul class="ty-items" id="tyShipped"></ul>
+    </aside>
+    <section class="ty-edit">
+      <div class="field-row two">
+        <label class="field"><span>Start from</span><select id="tyBase"></select></label>
+        <label class="field"><span>Name</span><input type="text" id="tyName" maxlength="60" placeholder="e.g. Cardless withdrawal"></label>
+        <label class="field"><span>Message class</span><select id="tyCls"></select></label>
+        <label class="field"><span>Processing code <em>6 digits</em></span><input type="text" id="tyProc" class="mono" maxlength="6" inputmode="numeric"></label>
+      </div>
+      <p class="si-note" id="tyMoney"></p>
+      <div class="ty-fields-head"><b>Fields</b><span class="summary-hint" id="tyMti"></span></div>
+      <div class="table-wrap"><table class="tbl ty-table">
+        <thead><tr><th>Field</th><th>Format</th><th>Value</th><th>From</th><th></th></tr></thead>
+        <tbody id="tyFields"><tr><td colspan="5" class="muted">Pick a type to start from.</td></tr></tbody>
+      </table></div>
+      <div class="ty-add">
+        <input type="number" id="tyAddNo" min="2" max="127" placeholder="Field" class="mono" aria-label="Field number">
+        <input type="text" id="tyAddVal" placeholder="Value, e.g. TKN{random:8}" class="mono" aria-label="Value">
+        <button type="button" class="btn sm" id="tyAdd">Add field</button>
+      </div>
+      <p class="si-note">Placeholders, filled in for each message: <span class="mono">{random:8} {date:MMdd} {account} {to} {amount} {currency} {terminal} {stan} {rrn} {pan}</span></p>
+      <p class="ty-error" id="tyError" hidden></p>
+      <details class="si-details" id="tyTestBox"><summary>Test send to the active target</summary>
+        <div class="field-row three">
+          <label class="field"><span>Account <em>or @ROLE</em></span><input type="text" id="tyTestFrom" class="mono"></label>
+          <label class="field"><span>To account <em>if it needs one</em></span><input type="text" id="tyTestTo" class="mono"></label>
+          <label class="field"><span>Amount</span><input type="text" id="tyTestAmount" value="10.00" inputmode="decimal"></label>
+        </div>
+        <div class="si-actions"><button type="button" class="btn sm" id="tyTest">Send one message</button></div>
+        <div id="tyTestOut"></div>
+      </details>
+      <div class="ty-actions">
+        <span class="ty-status" id="tyStatus"></span>
+        <button type="button" class="btn sm ghost-plain danger" id="tyDelete" hidden>Delete</button>
+        <button type="button" class="btn sm" id="tySubmit" hidden>Submit for approval</button>
+        <button type="button" class="btn primary" id="tySave">Save</button>
+      </div>
+      <div class="ty-submit" id="tySubmitBox" hidden>
+        <h3>Submit for approval</h3>
+        <p class="si-note">Sends the structure of this type to SwitchProof for review. If it's approved, it becomes a built-in type for every user in the next release.
+          Fixed values are masked (letters become A, digits 9; placeholders stay) unless you choose to share them. This is exactly what is sent:</p>
+        <label class="chk"><input type="checkbox" id="tyShare"> <span>Share the example values unmasked</span></label>
+        <pre class="ty-json" id="tyJson"></pre>
+        <label class="field"><span>What it's for <em>optional, helps the review</em></span><textarea id="tyWhy" rows="2" maxlength="1000"></textarea></label>
+        <div class="ty-actions">
+          <button type="button" class="btn sm ghost-plain" id="tySubmitCancel">Cancel</button>
+          <button type="button" class="btn primary" id="tySubmitSend">Send for approval</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</dialog>
+
 <dialog class="fb-dlg access-dlg" id="accessDlg" aria-labelledby="accTitle">
   <div class="dlg-head">
     <div>
@@ -928,6 +1025,7 @@
     <button type="button" class="fb-tab" role="tab" data-acc-tab="sales" aria-selected="false">Sales<span class="tab-count" id="salesCount"></span></button>
     <button type="button" class="fb-tab" role="tab" data-acc-tab="codes" aria-selected="false">Invite codes</button>
     <button type="button" class="fb-tab" role="tab" data-acc-tab="redeemed" aria-selected="false">Redeemed</button>
+    <button type="button" class="fb-tab" role="tab" data-acc-tab="types" aria-selected="false">Types<span class="tab-count" id="typesCount"></span></button>
   </div>
   <p class="fb-msg" id="accMsg"></p>
 
@@ -981,6 +1079,18 @@
   <section data-acc-pane="redeemed" hidden>
     <div class="table-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Email</th><th>Redeemed</th><th>Plan ends</th><th></th></tr></thead><tbody id="redeemList"></tbody></table></div>
   </section>
+
+  <section data-acc-pane="types" hidden>
+    <p class="plan-sub">Transaction types users designed and sent for approval. Approved ones ship as built-in types for everyone in the next build; only you see who sent them.</p>
+    <div class="acc-form" id="typesRelease" hidden>
+      <div class="field-row three">
+        <span class="field"><span><b id="typesReleaseCount">0</b> approved, waiting for a release</span></span>
+        <label class="field"><span>Released in</span><input type="text" id="typesReleaseVer" class="mono" placeholder="1.4.5"></label>
+        <span class="acc-submit"><button type="button" class="btn sm" id="typesReleaseBtn">Mark as released</button></span>
+      </div>
+    </div>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>Sent</th><th>From</th><th>Type</th><th class="num">Fields</th><th>Status</th><th></th></tr></thead><tbody id="typeSubList"></tbody></table></div>
+  </section>
 </dialog>
 
 <dialog class="fb-dlg" id="fbDlg" aria-labelledby="fbTitle">
@@ -1028,8 +1138,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20260927214317"></script>
-<script src="agent.js?v=20260927214317"></script>
-<script src="app.js?v=20260927214317"></script>
+<script src="config.js?v=20261001205611"></script>
+<script src="agent.js?v=20261001205611"></script>
+<script src="app.js?v=20261001205611"></script>
 </body>
 </html>

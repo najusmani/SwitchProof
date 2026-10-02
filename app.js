@@ -195,6 +195,7 @@ async function loadTargets() {
     $('tfProfile').innerHTML = profiles.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}${p.verified ? ' — verified' : ' — not tested on a switch'}</option>`).join('');
   } catch (e) { /* older agent without profiles: FLEXCUBE 1987 assumed */ }
   try { targetsState = await targetsApi('/api/targets'); renderTargets(); } catch (e) { /* shown via conn indicator */ }
+  loadCustomTypes();
 }
 
 function renderTargets() {
@@ -340,7 +341,7 @@ function onTypeChanged() {
   $('formatCols').innerHTML = t.cols.map((c, i) =>
     (i ? '<span class="col-sep">,</span>' : '') +
     `<span class="col-chip ${c === 'from' || (c === 'to' && !t.toOptional) ? 'req' : ''}">${COL_LABELS[c]}</span>`).join('');
-  $('rowsText').placeholder = (TEMPLATES[t.id] || '').trim();
+  $('rowsText').placeholder = (TEMPLATES[t.id] || TEMPLATES[t.base] || '').trim();
   $('rowsText').value = dataText[t.id] || '';
   $('drop').classList.toggle('loaded', !!$('rowsText').value.trim());
   reparse();
@@ -356,6 +357,7 @@ function setMode(m) {
   document.querySelectorAll('.mode-tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
   document.querySelectorAll('.bundle-only').forEach(el => { el.hidden = m !== 'bundle'; });
   $('bundleBox').hidden = m !== 'bundle';
+  if ($('srcPickRow')) $('srcPickRow').hidden = m === 'bundle' || !srcList(activeTarget()).length;
   renderPlan();
   renderTypes();
   renderBundle();
@@ -386,7 +388,7 @@ function renderBundle() {
       <span class="bi-name">${escapeHtml(t.name)}${t.tag && profileOf(activeTarget()).verified ? ` <span class="type-tag">${t.tag}</span>` : ''}<span class="type-code">${typeCode(t, activeTarget())}</span></span>
       <label class="bi-weight"><input type="number" min="1" max="1000" step="1" value="${b.weight}" data-bi-weight aria-label="Weight of ${escapeHtml(t.name)}"><span class="bi-share">${bundleShare(b)}</span></label>
       <button type="button" class="bi-remove" data-bi-remove aria-label="Remove ${escapeHtml(t.name)}">×</button>
-      ${opts.length > 1 ? `<select data-bi-then aria-label="Follow-up for ${escapeHtml(t.name)}">${opts.map(o => `<option value="${o}"${o === b.then ? ' selected' : ''}>${FOLLOW_LABEL[o]}</option>`).join('')}</select>` : ''}
+      ${srcList(activeTarget()).length || opts.length > 1 ? `<span class="bi-opts">${srcList(activeTarget()).length ? `<select data-bi-source aria-label="Source for ${escapeHtml(t.name)}" title="Source: whose card, which acquirer">${srcOptions(b.source)}</select>` : ''}${opts.length > 1 ? `<select data-bi-then aria-label="Follow-up for ${escapeHtml(t.name)}">${opts.map(o => `<option value="${o}"${o === b.then ? ' selected' : ''}>${FOLLOW_LABEL[o]}</option>`).join('')}</select>` : ''}${srcList(activeTarget()).length ? `<button type="button" class="link-btn" data-bi-dup title="Add ${escapeHtml(t.name)} again with another source">+ another source</button>` : ''}</span>` : ''}
     </li>`;
   }).join('') : '<li class="bundle-empty">Empty bundle: click transaction types above, or pick a preset.</li>';
   $('bundleEffect').innerHTML = bundleEffect();
@@ -406,6 +408,15 @@ function bundleEffect() {
     + '. Approved ones stay in Open transactions, where you can reverse them in bulk.';
 }
 
+$('bundleList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-bi-dup]');
+  if (!b) return;
+  const i = +b.closest('.bundle-item').dataset.i, it = bundle[i];
+  const used = new Set(bundle.filter(x => x.type === it.type).map(x => x.source || ''));
+  const next = srcList(activeTarget()).find(s => !used.has(s.id));
+  bundle.splice(i + 1, 0, { type: it.type, weight: it.weight, then: it.then, source: next ? next.id : undefined });
+  bundleChanged();
+});
 $('bundleList').addEventListener('input', (e) => {
   const li = e.target.closest('.bundle-item');
   if (!li || !e.target.matches('[data-bi-weight]')) return;
@@ -420,6 +431,7 @@ $('bundleList').addEventListener('change', (e) => {
   const li = e.target.closest('.bundle-item');
   if (!li) return;
   if (e.target.matches('[data-bi-then]')) { bundle[+li.dataset.i].then = e.target.value; bundleChanged(); }
+  if (e.target.matches('[data-bi-source]')) { bundle[+li.dataset.i].source = e.target.value || undefined; store.set('bundle', bundle); refreshSummaries(); }
   if (e.target.matches('[data-bi-weight]')) renderBundle();   // normalise what was typed
 });
 $('bundleList').addEventListener('click', (e) => {
@@ -568,7 +580,7 @@ $('clearBtn').addEventListener('click', () => {
 });
 
 $('templateBtn').addEventListener('click', () => {
-  const csv = TEMPLATES[activeType().id];
+  const csv = TEMPLATES[activeType().id] || TEMPLATES[activeType().base];
   if (!csv) return;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -601,6 +613,7 @@ function fillTargetDefaults(force) {
   $('defaultsTarget').textContent = t.name;
   $('defaultsSaved').textContent = '';
   renderPreview();
+  srcFill(t);
 }
 TARGET_FIELDS.forEach(f => $(f).addEventListener('input', () => {
   refreshSummaries();
@@ -622,6 +635,158 @@ TARGET_FIELDS.forEach(f => $(f).addEventListener('input', () => {
 }));
 ['count', 'duration', 'concurrency'].forEach(f => $(f).addEventListener('input', refreshSummaries));
 $('matchRows').addEventListener('change', refreshSummaries);
+
+// ---------- Sources: where transactions come from (saved per target) ----------
+// A source is whose card (F2, by its BIN) and who acquired it (F32), plus how it arrived. The switch and the core
+// decide on-us / off-us from these, and the money check compares the switch's verdict with the source's.
+const SRC_KINDS = { ONUS: 'On-us', REMOTE_ONUS: 'Remote on-us', OFFUS: 'Off-us', INTERNATIONAL: 'International', ABROAD: 'Our card abroad', CUSTOM: 'Custom' };
+/**
+ * The ready-made sources. Local currency = the target's default currency; the foreign one is USD, or EUR where
+ * USD is local. International: a foreign card here (local transaction, settled with the network in the foreign
+ * currency). Our card abroad: a foreign-currency transaction billed to the customer in the local currency.
+ */
+function srcReadyList(t) {
+  const local = resolveCcy(((t && t.defaults) || {}).currencyCode || '') || '840';
+  const foreign = local === '840' ? '978' : '840';
+  const out = [
+    { id: 'ONUS', name: 'On-us', kind: 'ONUS', posting: 'customer' },
+    { id: 'REMOTE_ONUS', name: 'Remote on-us', kind: 'REMOTE_ONUS', posting: 'customer' },
+    { id: 'OFFUS', name: 'Off-us', kind: 'OFFUS', posting: 'gl' },
+    { id: 'INTERNATIONAL', name: 'International', kind: 'INTERNATIONAL', posting: 'gl', currency: local, settleCurrency: foreign, settleRate: '' },
+    { id: 'ABROAD', name: `Our card abroad (${CCY_ALPHA[foreign] || foreign})`, kind: 'ABROAD', posting: 'customer', currency: foreign, settleCurrency: foreign, settleRate: '1', billCurrency: local, billRate: '' },
+  ];
+  if (local !== '840' && local !== '978')   // USD and EUR both foreign: the second one too
+    out.push({ name: 'Our card abroad (EUR)', kind: 'CUSTOM', posting: 'customer', currency: '978', settleCurrency: '978', settleRate: '1', billCurrency: local, billRate: '' });
+  return out;
+}
+const SRC_KEYS = ['pan', 'acquirer', 'forwarding', 'terminal', 'currency', 'mcc', 'entryMode', 'settleCurrency', 'settleRate', 'billCurrency', 'billRate'];
+const SRC_CCY_KEYS = ['currency', 'settleCurrency', 'billCurrency'];
+let srcDraft = [];
+function srcList(t) { return (t && t.sources) || []; }
+function srcName(t, id) { const s = srcList(t).find(x => x.id === id); return s ? s.name : id; }
+
+function srcFill(t) {
+  srcDraft = JSON.parse(JSON.stringify(srcList(t)));
+  $('srcSaved').textContent = '';
+  const list = srcList(t);
+  $('srcSummary').textContent = list.length ? list.map(x => x.name).join(' · ') : 'none yet: on-us, remote on-us, off-us, international…';
+  $('srcTarget').textContent = t ? t.name : '—';
+  srcRender();
+  srcPickRender();
+}
+
+function srcPlaceholder(s, k, t) {
+  const d = (t && t.defaults) || {};
+  if (k === 'pan') return s.kind === 'OFFUS' ? "other bank's card" : s.kind === 'INTERNATIONAL' ? 'foreign card' : 'target card';
+  if (k === 'acquirer') return s.kind === 'REMOTE_ONUS' || s.kind === 'ABROAD' ? (d.remoteAcquirer || 'other bank') : 'target';
+  if (k === 'forwarding') return s.kind === 'REMOTE_ONUS' || s.kind === 'INTERNATIONAL' || s.kind === 'ABROAD' ? 'network' : '—';
+  if (k === 'terminal') return 'target';
+  if (k === 'currency') return (CCY_ALPHA[resolveCcy(d.currencyCode || '')] || 'target');
+  if (k === 'settleRate' || k === 'billRate') return 'rate';
+  return '—';
+}
+
+/** What a source still needs before it can be used. */
+function srcNeeds(s) {
+  const n = [];
+  if ((s.kind === 'OFFUS' || s.kind === 'INTERNATIONAL') && !s.pan) n.push('a card');
+  if (s.settleCurrency && !s.settleRate) n.push('the settlement rate');
+  if (s.billCurrency && !s.billRate) n.push('the billing rate');
+  return n;
+}
+
+function srcRender() {
+  const t = activeTarget();
+  $('srcRows').innerHTML = srcDraft.length ? srcDraft.map((s, i) => {
+    const val = (k) => SRC_CCY_KEYS.includes(k) && s[k] ? (CCY_ALPHA[s[k]] || s[k]) : (s[k] || '');
+    const inp = (k, cls, max) => `<input type="text" class="mono ${cls || ''}" data-src="${i}" data-k="${k}" value="${escapeHtml(val(k))}" placeholder="${escapeHtml(srcPlaceholder(s, k, t))}" maxlength="${max}">`;
+    const needs = srcNeeds(s);
+    return `<tr class="src-main${needs.length ? ' src-need' : ''}">
+      <td><input type="text" data-src="${i}" data-k="name" value="${escapeHtml(s.name || '')}" maxlength="40" placeholder="Name"></td>
+      <td><select data-src="${i}" data-k="kind">${Object.entries(SRC_KINDS).map(([k, n]) => `<option value="${k}"${k === s.kind ? ' selected' : ''}>${n}</option>`).join('')}</select></td>
+      <td>${inp('pan', 'w-card', 19)}</td>
+      <td>${inp('acquirer', 'w-id', 11)}</td><td>${inp('forwarding', 'w-id', 11)}</td><td>${inp('terminal', 'w-id', 16)}</td>
+      <td>${inp('mcc', 'w-4', 4)}</td><td>${inp('entryMode', 'w-3', 3)}</td>
+      <td><select data-src="${i}" data-k="posting"><option value="customer"${s.posting !== 'gl' ? ' selected' : ''}>Customer account</option><option value="gl"${s.posting === 'gl' ? ' selected' : ''}>GL to GL</option></select></td>
+      <td><button type="button" class="t-btn del" data-src-rm="${i}" title="Remove source"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></td></tr>
+    <tr class="src-ccy${needs.length ? ' src-need' : ''}"><td colspan="10"><span class="src-ccy-line">
+      <span>Transaction ${inp('currency', 'w-ccy', 3)}</span>
+      <span>Settlement <em>F5/F50</em> ${inp('settleCurrency', 'w-ccy', 3)} at ${inp('settleRate', 'w-rate', 12)}</span>
+      <span>Billing <em>F6/F51</em> ${inp('billCurrency', 'w-ccy', 3)} at ${inp('billRate', 'w-rate', 12)}</span>
+      ${needs.length ? `<span class="bad-t">Needs ${needs.join(', ')}</span>` : ''}</span></td></tr>`;
+  }).join('') : '<tr><td colspan="10" class="muted">No sources yet: add the ready-made ones, then fill in the cards and rates.</td></tr>';
+}
+
+/** The source picker of a single-type run, and the bundle rows' pickers. */
+function srcPickRender() {
+  const t = activeTarget(), list = srcList(t);
+  const want = store.get('src.' + (t ? t.id : ''), '');
+  $('srcPick').innerHTML = '<option value="">Target defaults</option>' + list.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
+  $('srcPick').value = list.some(s => s.id === want) ? want : '';
+  $('srcPickRow').hidden = mode === 'bundle' || !list.length;
+  if (mode === 'bundle') renderBundle();
+}
+
+/** Options for a bundle row or UAT step; a source this target doesn't have stays visible, marked. */
+function srcOptions(selected) {
+  const list = srcList(activeTarget());
+  let o = '<option value="">Defaults</option>' + list.map(s => `<option value="${escapeHtml(s.id)}"${s.id === selected ? ' selected' : ''}>${escapeHtml(s.name)}</option>`).join('');
+  if (selected && !list.some(s => s.id === selected)) o += `<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)} (not on this target)</option>`;
+  return o;
+}
+
+$('srcRows').addEventListener('input', (e) => {
+  const el = e.target.closest('[data-src]');
+  if (!el) return;
+  srcDraft[+el.dataset.src][el.dataset.k] = el.value;
+  $('srcSaved').className = 'saved-note'; $('srcSaved').textContent = 'not saved';
+});
+$('srcRows').addEventListener('change', (e) => {
+  const el = e.target.closest('[data-src]');
+  if (el && el.dataset.k === 'kind') {
+    const s = srcDraft[+el.dataset.src];
+    s.posting = el.value === 'OFFUS' || el.value === 'INTERNATIONAL' ? 'gl' : 'customer';
+    srcRender();
+    return;
+  }
+  if (el && SRC_CCY_KEYS.concat(['settleRate', 'billRate', 'pan']).includes(el.dataset.k)) {
+    const s = srcDraft[+el.dataset.src];
+    if (SRC_CCY_KEYS.includes(el.dataset.k)) s[el.dataset.k] = resolveCcy(el.value) || el.value.trim();
+    srcRender();
+  }
+});
+$('srcRows').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-src-rm]');
+  if (!b) return;
+  srcDraft.splice(+b.dataset.srcRm, 1);
+  srcRender();
+  $('srcSaved').className = 'saved-note'; $('srcSaved').textContent = 'not saved';
+});
+$('srcReady').addEventListener('click', () => {
+  for (const r of srcReadyList(activeTarget())) if (!srcDraft.some(s => (r.id && (s.id === r.id || s.kind === r.kind)) || s.name === r.name)) srcDraft.push({ ...r });
+  srcRender();
+  $('srcSaved').className = 'saved-note'; $('srcSaved').textContent = 'not saved: fill in the cards and rates marked red, then save';
+});
+$('srcAdd').addEventListener('click', () => { srcDraft.push({ name: '', kind: 'CUSTOM', posting: 'customer' }); srcRender(); });
+$('srcSave').addEventListener('click', async () => {
+  const t = activeTarget();
+  if (!t) return;
+  const sources = srcDraft.map(s => {
+    const o = { name: (s.name || '').trim(), kind: s.kind, posting: s.posting };
+    if (s.id) o.id = s.id;
+    for (const k of SRC_KEYS) if (s[k] && String(s[k]).trim()) o[k] = SRC_CCY_KEYS.includes(k) ? (resolveCcy(String(s[k]).trim()) || String(s[k]).trim()) : String(s[k]).trim();
+    return o;
+  });
+  try {
+    targetsState = await targetsApi('/api/targets/sources', { id: t.id, sources });
+    renderTargets();
+    srcFill(activeTarget());
+    $('srcSaved').className = 'saved-note ok'; $('srcSaved').textContent = `saved for ${t.name}`;
+  } catch (e) { $('srcSaved').className = 'saved-note bad'; $('srcSaved').textContent = e.message; }
+});
+$('srcEdit').addEventListener('click', () => { srcFill(activeTarget()); $('srcDlg').showModal(); });
+$('srcClose').addEventListener('click', () => $('srcDlg').close());
+$('srcPick').addEventListener('change', () => { const t = activeTarget(); if (t) store.set('src.' + t.id, $('srcPick').value); refreshSummaries(); });
 
 // ---------- Placeholder card / acquirer ----------
 // The downloadable app ships placeholder values instead of any bank's real test card and acquirer.
@@ -722,7 +887,8 @@ $('startBtn').addEventListener('click', async () => {
 
   const payload = {
     type: mode === 'bundle' ? bundle[0].type : currentType.id,
-    mix: mode === 'bundle' ? bundle.map(b => ({ type: b.type, weight: Number(b.weight) || 1, then: b.then })) : undefined,
+    mix: mode === 'bundle' ? bundle.map(b => ({ type: b.type, weight: Number(b.weight) || 1, then: b.then, source: b.source || undefined })) : undefined,
+    source: mode === 'bundle' ? undefined : ($('srcPick').value || undefined),
     count: Number($('count').value) || 1,
     durationSeconds: Number($('duration').value) || 0,
     concurrency: Number($('concurrency').value) || 1,
@@ -877,7 +1043,7 @@ function renderKinds(kinds) {
   if (!kinds) return;
   const total = kinds.filter(k => !k.followUp).reduce((n, k) => n + k.weight, 0) || 1;
   $('kindBody').innerHTML = kinds.map(k => `<tr class="${k.followUp ? 'kind-follow' : ''}">
-    <td>${k.followUp ? '↳ ' + (k.followUp === 'SETTLE' ? 'Settlement' : 'Reversal') : escapeHtml(typeById(k.type).name)}</td>
+    <td>${k.followUp ? '↳ ' + (k.followUp === 'SETTLE' ? 'Settlement' : 'Reversal') : escapeHtml(typeById(k.type).name)}${!k.followUp && k.sourceName ? ` <span class="pill neutral">${escapeHtml(k.sourceName)}</span>` : ''}</td>
     <td class="num">${k.followUp ? '' : Math.round(k.weight / total * 100) + '%'}</td>
     <td class="num">${k.sent}</td>
     <td class="num">${k.approved}</td>
@@ -908,7 +1074,7 @@ function renderResults(rows) {
       : `<span class="pill ${cls} code" title="${escapeHtml(CODE_DESC[code] || '')}">${escapeHtml(label)} ${escapeHtml(r.ok ? 'approved' : (CODE_DESC[code] || 'declined').toLowerCase())}</span>`;
     const typeCell = r.followUp
       ? `<span class="muted">↳ ${r.followUp === 'SETTLE' ? 'settlement' : 'reversal'}</span>`
-      : escapeHtml(r.type ? typeById(r.type).name : '');
+      : escapeHtml(r.type ? typeById(r.type).name : '') + (r.sourceName ? `<div class="sub">${escapeHtml(r.sourceName)}</div>` : '');
     return `<tr>
       <td class="muted">${r.index + 1}</td>
       <td class="type-cell">${typeCell}</td>
@@ -1831,6 +1997,7 @@ function stepRowHtml(s) {
     <td><input class="s-currency sm" value="${escapeHtml(s.currency ? (CCY_ALPHA[s.currency] || s.currency) : '')}" placeholder="def"></td>
     <td><input class="s-settle" value="${v('settleAmount')}" placeholder="—" inputmode="decimal"></td>
     <td><input class="s-ofrrn mono" value="${v('ofRrn')}" placeholder="step above" maxlength="12" title="Settle / Reverse: RRN of the transaction to act on (sent earlier, or in the switch log). Blank = the latest approved step above"></td>
+    <td><select class="s-source">${srcOptions(s.source)}</select></td>
     <td><input class="s-pan" value="${v('pan')}" placeholder="target card"></td>
     <td><input class="s-proc sm" value="${v('proc')}" placeholder="def" inputmode="numeric" maxlength="6" title="Processing code override (6 digits)"></td>
     <td class="c"><input type="checkbox" class="s-remote" ${s.remote === 'Y' ? 'checked' : ''}></td>
@@ -1849,6 +2016,7 @@ function syncStepRows() {
     tr.querySelector('.s-amount').disabled = fo || net || inq;
     tr.querySelector('.s-currency').disabled = fo || net || inq;
     tr.querySelector('.s-pan').disabled = fo || net;
+    tr.querySelector('.s-source').disabled = fo || net;
     tr.querySelector('.s-settle').disabled = a !== 'COMPLETION';
     tr.querySelector('.s-ofrrn').disabled = !fo;
     // With an RRN, a blank settle amount settles the original amount.
@@ -1912,6 +2080,8 @@ function readSteps() {
     if (s.ofRrn && !/^[A-Za-z0-9]{1,12}$/.test(s.ofRrn)) throw new Error(`Step ${i + 1}: the RRN must be up to 12 letters or digits`);
     const rm = tr.querySelector('.s-remote');
     if (rm.checked && !rm.disabled) s.remote = 'Y';
+    const src = get('.s-source');
+    if (src) s.source = src;
     const proc = get('.s-proc');
     if (proc) {
       if (!/^\d{6}$/.test(proc)) throw new Error(`Step ${i + 1}: processing code must be 6 digits`);
@@ -2131,7 +2301,7 @@ function renderRun(run) {
     const steps = c.steps.map(s => `
       <tr class="${s.status === 'PASS' ? '' : 'row-' + statusCls(s.status)}">
         <td class="muted">${s.no}</td>
-        <td>${escapeHtml(ACTION_NAMES[s.action] || s.action)}<div class="sub mono">${escapeHtml([s.mti, s.procCode].filter(Boolean).join(' · '))}</div></td>
+        <td>${escapeHtml(ACTION_NAMES[s.action] || s.action)}${s.sourceName ? ` <span class="pill neutral">${escapeHtml(s.sourceName)}</span>` : ''}<div class="sub mono">${escapeHtml([s.mti, s.procCode].filter(Boolean).join(' · '))}</div></td>
         <td>${escapeHtml(s.rrn || '')}${s.parentRrn ? `<div class="sub" title="${escapeHtml(s.parentSource || 'the latest approved step above')}">parent ${escapeHtml(s.parentRrn)}${s.parentSource ? ' · ' + escapeHtml(s.parentSource.startsWith('found in') ? 'switch log' : 'earlier run') : ''}</div>` : ''}</td>
         <td>${escapeHtml(s.from || '')}${s.fromRole ? `<div class="sub">${escapeHtml(s.fromRole)}</div>` : ''}${s.to ? ' → ' + escapeHtml(s.to) : ''}</td>
         <td class="num">${escapeHtml(s.amount || '')} <span class="muted">${escapeHtml(CCY_ALPHA[s.currency] || s.currency || '')}</span></td>
@@ -2798,7 +2968,7 @@ function renderPlanDialog() {
   const lim = license.limits || {};
   $('planFeatures').innerHTML = Object.entries(names).map(([k, n]) => {
     const on = can(k);
-    const need = k === 'money' || k === 'standin' ? 'Enterprise' : 'Team';
+    const need = k === 'money' || k === 'standin' ? 'Enterprise' : 'Team';   // types, bundles, uat... are Team
     return `<li class="${on ? 'on' : 'off'}">${escapeHtml(n)}${on ? '' : ` <span class="muted">· ${need}</span>`}</li>`;
   }).join('') + (can('unlimited') ? '' : `<li class="note">Free load tests: up to ${lim.count} per run, ${lim.concurrency} at once. UAT: up to ${lim.uatCases} cases per run.</li>`);
   $('planCodeForm').hidden = !AGENT.hosted;
@@ -3038,7 +3208,7 @@ $('planTokenBtn').addEventListener('click', async () => {
 $('upPlan').addEventListener('click', () => { $('upgradeDlg').close(); $('planBtn').click(); });
 
 // ---------- Access (admins, on the website): plan grants and invite codes ----------
-const acc = { grants: [], codes: [], redeemed: [], sales: [], payments: [], tab: 'grants' };
+const acc = { grants: [], codes: [], redeemed: [], sales: [], payments: [], types: null, typesError: null, tab: 'grants' };
 const siteUrl = () => location.origin + location.pathname;
 const dayEnd = (d) => new Date(d + 'T23:59:59').toISOString();
 // Shown in the viewer's own time zone: "until 25 Dec" means the end of 25 Dec where you are.
@@ -3070,6 +3240,7 @@ async function accLoad(quiet) {
   acc.sales = s.data || []; acc.payments = p.data || [];
   if (!quiet) accMsg('');
   accRender();
+  accLoadTypes();   // separate: works (or explains) even before supabase-types.sql has been run
 }
 
 /** Plans ending in the next 30 days or ended in the last 30: grants, and invite-code trials nobody has replaced. */
@@ -3329,11 +3500,390 @@ document.querySelector('#accessDlg').addEventListener('change', async (e) => {
   accRender();
 });
 
+// ---------- Your own transaction types (Team) ----------
+// A design starts from a built-in type (which says how money moves) and changes its name, message class,
+// processing code and fields. It works on this PC at once; submitted for approval it can ship to everyone.
+const TY_BASES = TYPES.filter(t => t.cls !== '800').map(t => t.id);   // built-ins a design can start from
+const TY_PROTECTED = new Set([0, 1, 3, 7, 11, 37, 39]);
+const TY_MONEY = {
+  WITHDRAWAL: 'debits the account', PURCHASE: 'holds the amount (authorization)', TRANSFER: 'debits one account and credits the other',
+  BALANCE_INQUIRY: 'moves no money', MINI_STATEMENT: 'moves no money', PIN_CHANGE: 'moves no money', CASH_ADVANCE: 'holds the amount (authorization)',
+  PURCHASE_CASHBACK: 'debits the account', BILL_PAYMENT: 'debits the account and credits the biller', OFFLINE_PURCHASE: 'debits the account (advice)',
+  REFUND: 'credits the account', CASH_DEPOSIT: 'credits the account',
+};
+const ty = { types: [], classes: { 100: 'Authorization request', 120: 'Authorization advice', 200: 'Financial request', 220: 'Financial advice' }, def: null, preview: null, subs: [], timer: null };
+const tyClone = (d) => JSON.parse(JSON.stringify(d));
+/** Letters become A and digits 9; placeholders like {random:8} stay: the structure without the bank's values. */
+const tyMask = (v) => String(v).replace(/(\{[^}]*\})|([A-Za-z])|([0-9])/g, (m, ph, a) => ph || (a ? 'A' : '9'));
+
+/** Puts the designs (shipped ones and this PC's) into the type pickers, UAT actions and bundles. */
+function applyCustomTypes(list) {
+  ty.types = list || [];
+  for (let i = TYPES.length - 1; i >= 0; i--) if (TYPES[i].custom) { delete ACTION_NAMES[TYPES[i].id]; TYPES.splice(i, 1); }
+  for (const d of ty.types) {
+    const base = TYPES.find(t => t.id === d.base) || TYPES[0];
+    TYPES.push({ id: d.id, name: d.name, cls: d.cls, proc: d.proc, icon: base.icon, cols: base.cols, custom: true, global: !!d.global, base: d.base, tag: d.global ? null : 'Yours' });
+    ACTION_NAMES[d.id] = d.name;
+    if (INQUIRY_ACTIONS.includes(d.base) && !INQUIRY_ACTIONS.includes(d.id)) INQUIRY_ACTIONS.push(d.id);
+    if (TWO_ACCOUNT_ACTIONS.includes(d.base) && !TWO_ACCOUNT_ACTIONS.includes(d.id)) TWO_ACCOUNT_ACTIONS.push(d.id);
+  }
+  const want = store.get('type', currentType.id);
+  if (!TYPES.some(t => t.id === currentType.id) || (want !== currentType.id && TYPES.some(t => t.id === want))) currentType = typeById(want);
+  bundle = bundle.filter(b => TYPES.some(t => t.id === b.type));
+  renderTypes();
+  if (mode === 'bundle') bundleChanged();
+}
+
+async function loadCustomTypes() {
+  try {
+    const d = await uatApi('/api/types');
+    if (d.classes) ty.classes = d.classes;
+    applyCustomTypes(d.types);
+  } catch (e) { /* an older agent without designs */ }
+}
+
+function tyNewDef(base) {
+  const b = TYPES.find(t => t.id === (base || 'WITHDRAWAL'));
+  return { name: '', base: b.id, cls: b.cls, proc: b.proc, fields: {} };
+}
+
+async function tyOpen(id) {
+  $('tyLock').hidden = can('types');
+  $('tyBase').innerHTML = TY_BASES.map(id => `<option value="${id}">${escapeHtml(typeById(id).name)}</option>`).join('');
+  $('tyCls').innerHTML = Object.entries(ty.classes).map(([c, n]) => `<option value="${c}">x${c}: ${escapeHtml(n)}</option>`).join('');
+  const t = activeTarget();
+  const role = t && Object.entries(t.accounts || {}).find(([, v]) => v);
+  if (!$('tyTestFrom').value) $('tyTestFrom').value = role ? '@' + role[0] : '';
+  if (!$('typesDlg').open) $('typesDlg').showModal();
+  await loadCustomTypes();
+  await tyLoadSubs();
+  const pick = id && ty.types.find(d => d.id === id);
+  tyEdit(pick ? tyClone(pick) : (ty.def && !id ? ty.def : tyNewDef()));
+}
+
+function tyRenderList() {
+  const item = (d) => {
+    const sub = tySubFor(d.id);
+    const badge = d.global ? `<span class="pill neutral">${escapeHtml(d.release ? 'since ' + d.release : 'shipped')}</span>` : sub ? tySubPill(sub) : '';
+    return `<li><button type="button" class="ty-item${ty.def && ty.def.id === d.id ? ' on' : ''}" data-ty="${escapeHtml(d.id)}"><b>${escapeHtml(d.name)}</b>
+      <span class="mono muted">x${escapeHtml(d.cls)} · ${escapeHtml(d.proc)} · from ${escapeHtml(typeById(d.base).name)}</span>${badge}</button></li>`;
+  };
+  const mine = ty.types.filter(d => !d.global), shipped = ty.types.filter(d => d.global);
+  $('tyMine').innerHTML = mine.length ? mine.map(item).join('') : '<li class="muted">None yet.</li>';
+  $('tyShipped').innerHTML = shipped.length ? shipped.map(item).join('') : '<li class="muted">None yet: approved types arrive with releases.</li>';
+}
+
+function tyEdit(def) {
+  ty.def = def;
+  const shipped = !!def.global;
+  $('tyBase').value = def.base; $('tyName').value = def.name; $('tyCls').value = def.cls; $('tyProc').value = def.proc;
+  for (const id of ['tyBase', 'tyName', 'tyCls', 'tyProc', 'tyAddNo', 'tyAddVal', 'tyAdd']) $(id).disabled = shipped;
+  $('tySave').textContent = shipped ? 'Save a copy' : 'Save';
+  $('tyDelete').hidden = !def.id || shipped;
+  $('tySubmit').hidden = !def.id || shipped;
+  $('tySubmitBox').hidden = true;
+  $('tyTestOut').innerHTML = '';
+  tyStatusLine();
+  tyRenderList();
+  tyMoneyLine();
+  tyPreview();
+}
+
+function tyMoneyLine() {
+  const d = ty.def, b = typeById(d.base);
+  const follow = !['BALANCE_INQUIRY', 'MINI_STATEMENT', 'PIN_CHANGE'].includes(d.base)
+    ? (d.cls === '100' ? ' Can be reversed or settled (completion).' : ' Can be reversed.') : '';
+  $('tyMoney').textContent = `Money: ${TY_MONEY[d.base] || 'as ' + b.name}, like ${b.name}; money checks, reversals and stand-in treat it the same way.${follow}`;
+}
+
+function tyStatusLine() {
+  const d = ty.def, sub = d && d.id ? tySubFor(d.id) : null;
+  $('tyStatus').innerHTML = d.global ? `Shipped with SwitchProof${d.release ? ' ' + escapeHtml(d.release) : ''}. Save a copy to change it.`
+    : !d.id ? 'Not saved yet.'
+    : sub ? tySubPill(sub) + (sub.admin_note ? ` <span class="muted">${escapeHtml(sub.admin_note)}</span>` : '')
+    : 'Saved on this PC.';
+}
+
+/** The form into the design (field changes are kept as they are edited in the table). */
+function tyRead() {
+  const d = ty.def;
+  if (d.global) return d;
+  d.base = $('tyBase').value; d.name = $('tyName').value.trim(); d.cls = $('tyCls').value; d.proc = $('tyProc').value.trim();
+  return d;
+}
+
+function tyPreviewSoon() { clearTimeout(ty.timer); ty.timer = setTimeout(tyPreview, 250); }
+
+async function tyPreview() {
+  const d = tyRead(), t = activeTarget();
+  if (!t) { $('tyFields').innerHTML = '<tr><td colspan="5" class="muted">Add a target to see the message.</td></tr>'; return; }
+  const from = (t.accounts && Object.values(t.accounts).find(Boolean)) || '000123456001';
+  try {
+    const p = await uatApi('/api/types/preview', { type: { ...d, name: d.name || 'Preview' }, targetId: t.id, from, to: from, amount: $('tyTestAmount').value });
+    ty.preview = p;
+    $('tyMti').textContent = `${p.mti} · ${p.proc} · ${p.profile}`;
+    $('tyError').hidden = !p.error;
+    $('tyError').textContent = p.error ? 'This message would fail: ' + p.error : '';
+    tyRenderFields(p.fields);
+  } catch (e) {
+    $('tyError').hidden = false;
+    $('tyError').textContent = e.message;
+  }
+}
+
+function tyRenderFields(rows) {
+  const d = ty.def, ro = !!d.global;
+  $('tyFields').innerHTML = rows.map(r => {
+    const rule = d.fields[r.n];
+    const locked = TY_PROTECTED.has(r.n) || ro;
+    const value = rule && rule.mode === 'fixed'
+      ? `<input type="text" class="mono ty-val" data-ty-val="${r.n}" value="${escapeHtml(rule.value)}"${ro ? ' disabled' : ''}>`
+      : rule && rule.mode === 'remove' ? '<span class="muted">left out</span>'
+      : `<span class="mono">${escapeHtml(r.value == null ? '' : r.value)}</span>`;
+    const from = rule ? (rule.mode === 'remove' ? '<span class="pill warn">removed</span>' : '<span class="pill ok">yours</span>')
+      : TY_PROTECTED.has(r.n) ? '<span class="muted">each message</span>' : '<span class="muted">base</span>';
+    const acts = locked ? '' : rule
+      ? `<button type="button" class="link-btn" data-ty-act="reset" data-n="${r.n}">${rule.mode === 'remove' ? 'Restore' : 'Undo'}</button>`
+      : `<button type="button" class="link-btn" data-ty-act="set" data-n="${r.n}">Set value</button><button type="button" class="link-btn" data-ty-act="remove" data-n="${r.n}">Leave out</button>`;
+    const note = r.error || r.note;
+    return `<tr class="${r.sent ? '' : 'row-muted'}"><td class="mono">F${r.n}<div class="sub">${escapeHtml(r.name || '')}</div></td><td class="mono">${escapeHtml(r.format || '–')}</td>
+      <td>${value}${note ? `<div class="sub ${r.error ? 'bad-t' : 'muted'}">${escapeHtml(note)}</div>` : ''}</td><td>${from}</td><td class="acc-actions">${acts}</td></tr>`;
+  }).join('') || '<tr><td colspan="5" class="muted">No fields.</td></tr>';
+}
+
+async function tyLoadSubs() {
+  ty.subs = [];
+  const sb = AGENT.supabase && AGENT.supabase(), user = await signedInUser();
+  if (!sb || !user) return;
+  const { data, error } = await sb.from('type_submissions').select('id, local_id, name, status, admin_note, release, created_at').eq('user_id', user.id).order('created_at', { ascending: false });
+  if (!error) ty.subs = data || [];
+}
+const tySubFor = (localId) => ty.subs.find(s => s.local_id === localId);
+function tySubPill(s) {
+  const t = { pending: ['warn', 'Waiting for approval'], approved: ['ok', 'Approved: in the next release'], rejected: ['bad', 'Not approved'], released: ['ok', 'Released' + (s.release ? ' in ' + s.release : '')] }[s.status] || ['neutral', s.status];
+  return `<span class="pill ${t[0]}">${escapeHtml(t[1])}</span>`;
+}
+
+function tySubmission() {
+  const d = ty.def, share = $('tyShare').checked, fields = {};
+  for (const [n, r] of Object.entries(d.fields)) fields[n] = r.mode === 'fixed' ? { mode: 'fixed', value: share ? r.value : tyMask(r.value) } : { mode: 'remove' };
+  return { local_id: d.id, name: d.name, base: d.base, cls: d.cls, proc: d.proc, fields, description: $('tyWhy').value.trim() || null, shared_values: share,
+    agent_version: ty.agentVersion || null };
+}
+
+$('typesOpen').addEventListener('click', () => tyOpen());
+$('tyClose').addEventListener('click', () => $('typesDlg').close());
+$('tyNew').addEventListener('click', () => tyEdit(tyNewDef($('tyBase').value || 'WITHDRAWAL')));
+$('tyMine').addEventListener('click', (e) => { const b = e.target.closest('[data-ty]'); if (b) tyEdit(tyClone(ty.types.find(d => d.id === b.dataset.ty))); });
+$('tyShipped').addEventListener('click', (e) => { const b = e.target.closest('[data-ty]'); if (b) tyEdit(tyClone(ty.types.find(d => d.id === b.dataset.ty))); });
+$('tyBase').addEventListener('change', () => {
+  const b = typeById($('tyBase').value);
+  $('tyCls').value = b.cls; $('tyProc').value = b.proc;
+  if (!$('tyName').value.trim()) $('tyName').placeholder = 'e.g. My ' + b.name.toLowerCase();
+  tyRead(); tyMoneyLine(); tyPreview();
+});
+for (const id of ['tyCls', 'tyProc']) $(id).addEventListener('input', () => { tyRead(); tyMoneyLine(); tyPreviewSoon(); });
+$('tyName').addEventListener('input', () => tyRead());
+$('tyFields').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ty-act]');
+  if (!b) return;
+  const n = b.dataset.n, d = ty.def;
+  if (b.dataset.tyAct === 'reset') delete d.fields[n];
+  else if (b.dataset.tyAct === 'remove') d.fields[n] = { mode: 'remove' };
+  else {
+    const row = (ty.preview && ty.preview.fields || []).find(r => String(r.n) === n);
+    d.fields[n] = { mode: 'fixed', value: row && row.value && !/\*/.test(row.value) ? row.value : '' };
+  }
+  tyPreview();
+});
+$('tyFields').addEventListener('input', (e) => {
+  const i = e.target.closest('[data-ty-val]');
+  if (!i) return;
+  ty.def.fields[i.dataset.tyVal] = { mode: 'fixed', value: i.value };
+  tyPreviewSoon();
+});
+$('tyAdd').addEventListener('click', () => {
+  const n = Number($('tyAddNo').value), v = $('tyAddVal').value;
+  if (!(n >= 2 && n <= 127)) { toast('Fields are 2 to 127', 'bad'); return; }
+  if (TY_PROTECTED.has(n)) { toast(`F${n} is set for every message`, 'bad'); return; }
+  if (!v) { toast('Enter the value', 'bad'); return; }
+  ty.def.fields[n] = { mode: 'fixed', value: v };
+  $('tyAddNo').value = ''; $('tyAddVal').value = '';
+  tyPreview();
+});
+$('tySave').addEventListener('click', async () => {
+  const d = tyClone(tyRead());
+  if (d.global) { delete d.id; delete d.global; delete d.release; d.name = d.name + ' (copy)'; }
+  if (!d.name) { toast('Give the type a name', 'bad'); $('tyName').focus(); return; }
+  try {
+    const r = await uatApi('/api/types', { type: d });
+    applyCustomTypes(r.types);
+    tyEdit(tyClone(r.saved));
+    toast(`Saved: ${r.saved.name} is in the type list, bundles and UAT actions`, 'ok');
+  } catch (e) { toast(e.message, 'bad'); }
+});
+$('tyDelete').addEventListener('click', async () => {
+  const d = ty.def;
+  if (!d.id || !confirm(`Delete ${d.name} from this PC? Load tests and UAT cases that use it will stop working.`)) return;
+  try { const r = await uatApi('/api/types/delete', { id: d.id }); applyCustomTypes(r.types); tyEdit(tyNewDef()); } catch (e) { toast(e.message, 'bad'); }
+});
+$('tyTest').addEventListener('click', async () => {
+  const t = activeTarget();
+  if (!t) { toast('Add a target first', 'bad'); return; }
+  const d = tyRead();
+  if (!confirm(`Send one ${d.name || 'message'} (${d.cls === '100' || d.cls === '200' ? 'request' : 'advice'}) to ${targetLabel(t)}? It is a real message: the core may post it.`)) return;
+  $('tyTest').disabled = true;
+  try {
+    const r = await uatApi('/api/types/test', { type: { ...d, name: d.name || 'Test' }, targetId: t.id, from: $('tyTestFrom').value.trim(), to: $('tyTestTo').value.trim(), amount: $('tyTestAmount').value });
+    const resp = r.response || {};
+    $('tyTestOut').innerHTML = `<p class="si-note">${r.ok ? '<b class="ok-t">Approved</b>' : '<b class="bad-t">' + escapeHtml(r.error ? 'No answer' : 'Declined') + '</b>'}
+      ${escapeHtml(r.mti || '')} ${r.code ? `<span class="pill ${r.ok ? 'ok' : 'bad'} code" title="${escapeHtml(CODE_DESC[r.code] || '')}">${escapeHtml(r.code)}</span>` : ''} in ${r.latencyMs} ms · RRN <span class="mono">${escapeHtml((r.request || {}).F37 || '')}</span>${r.error ? ' · ' + escapeHtml(r.error) : ''}</p>
+      <div class="ty-kv">${Object.entries(resp).map(([k, v]) => `<span class="mono">${escapeHtml(k)}</span><span class="mono">${escapeHtml(v)}</span>`).join('')}</div>`;
+  } catch (e) { toast(e.message, 'bad'); }
+  finally { $('tyTest').disabled = false; }
+});
+$('tySubmit').addEventListener('click', async () => {
+  if (!(await signedInUser())) { toast('Sign in to submit a type for approval', 'bad'); return; }
+  $('tySubmitBox').hidden = false;
+  $('tyJson').textContent = JSON.stringify(tySubmission(), null, 2);
+  $('tySubmitBox').scrollIntoView({ block: 'nearest' });
+});
+$('tyShare').addEventListener('change', () => { $('tyJson').textContent = JSON.stringify(tySubmission(), null, 2); });
+$('tyWhy').addEventListener('input', () => { $('tyJson').textContent = JSON.stringify(tySubmission(), null, 2); });
+$('tySubmitCancel').addEventListener('click', () => { $('tySubmitBox').hidden = true; });
+$('tySubmitSend').addEventListener('click', async () => {
+  const sb = AGENT.supabase && AGENT.supabase();
+  if (!sb) return;
+  $('tySubmitSend').disabled = true;
+  try {
+    const { error } = await sb.from('type_submissions').insert(tySubmission());
+    if (error) throw new Error(fbTableMissing(error) ? 'Submissions are not set up on this site yet.' : error.message);
+    $('tySubmitBox').hidden = true;
+    await tyLoadSubs();
+    tyStatusLine(); tyRenderList();
+    toast('Sent for approval. You can keep using it on this PC meanwhile.', 'ok');
+  } catch (e) { toast(e.message, 'bad'); }
+  finally { $('tySubmitSend').disabled = false; }
+});
+
+// ---------- Access → Types: the owner approves designs for the global release ----------
+const TY_GLOBAL_ID = (name) => 'G_' + String(name || 'TYPE').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30);
+let tyAdminOpen = null;
+
+async function accLoadTypes() {
+  const sb = AGENT.supabase && AGENT.supabase();
+  if (!sb) return;
+  const { data, error } = await sb.from('type_submissions').select('*').order('created_at', { ascending: false }).limit(500);
+  acc.types = error ? null : (data || []);
+  acc.typesError = error ? (fbTableMissing(error) ? 'Type submissions are not set up yet: run tools/supabase-types.sql in Supabase.' : error.message) : null;
+  accRenderTypes();
+}
+
+function accRenderTypes() {
+  const list = acc.types;
+  const waiting = (list || []).filter(s => s.status === 'pending').length;
+  $('typesCount').textContent = waiting ? ' ' + waiting : '';
+  if (!list) { $('typeSubList').innerHTML = `<tr><td colspan="6" class="muted">${escapeHtml(acc.typesError || 'Loading…')}</td></tr>`; return; }
+  const approved = list.filter(s => s.status === 'approved').length;
+  $('typesRelease').hidden = !approved;
+  $('typesReleaseCount').textContent = approved;
+  $('typeSubList').innerHTML = list.length ? list.map(s => {
+    const open = tyAdminOpen === s.id;
+    const row = `<tr data-id="${s.id}" class="${s.status === 'rejected' || s.status === 'released' ? 'row-muted' : ''}">
+      <td class="mono">${escapeHtml(String(s.created_at || '').slice(0, 10))}</td><td>${escapeHtml(s.email || '')}</td>
+      <td><b>${escapeHtml(s.name)}</b><div class="sub mono">x${escapeHtml(s.cls)} · ${escapeHtml(s.proc)} · from ${escapeHtml(typeById(s.base).name)}</div></td>
+      <td class="num">${Object.keys(s.fields || {}).length}</td><td>${tySubPill(s)}${s.global_id ? `<div class="sub mono">${escapeHtml(s.global_id)}</div>` : ''}</td>
+      <td class="acc-actions"><button type="button" class="link-btn" data-tya="toggle">${open ? 'Close' : 'Review'}</button></td></tr>`;
+    if (!open) return row;
+    const def = s.approved_def || { name: s.name, base: s.base, cls: s.cls, proc: s.proc, fields: s.fields, description: s.description };
+    const fields = Object.entries(def.fields || {}).map(([n, r]) => `<tr><td class="mono">F${escapeHtml(n)}</td><td>${r.mode === 'remove' ? '<span class="pill warn">left out</span>'
+      : `<input type="text" class="mono ty-val" data-tya-field="${escapeHtml(n)}" value="${escapeHtml(r.value)}">`}</td>
+      <td><button type="button" class="link-btn" data-tya="dropfield" data-n="${escapeHtml(n)}">Drop</button></td></tr>`).join('');
+    return row + `<tr class="ty-review" data-id="${s.id}"><td colspan="6">
+      <p class="si-note">${s.shared_values ? 'The submitter shared the real example values.' : 'Values are masked (A = letter, 9 = digit): fill in what should ship, or drop the field.'}
+        Agent ${escapeHtml(s.agent_version || '?')}.${s.description ? ' <b>What it\'s for:</b> ' + escapeHtml(s.description) : ''}</p>
+      <div class="field-row three">
+        <label class="field"><span>Shipped as <em>id</em></span><input type="text" class="mono" data-tya-in="global_id" value="${escapeHtml(s.global_id || TY_GLOBAL_ID(def.name))}"></label>
+        <label class="field"><span>Name</span><input type="text" data-tya-in="name" value="${escapeHtml(def.name)}" maxlength="60"></label>
+        <label class="field"><span>Processing code</span><input type="text" class="mono" data-tya-in="proc" value="${escapeHtml(def.proc)}" maxlength="6"></label>
+      </div>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>Field</th><th>Value that ships</th><th></th></tr></thead><tbody>${fields || '<tr><td colspan="3" class="muted">No field changes.</td></tr>'}</tbody></table></div>
+      <label class="field"><span>Note to the submitter</span><input type="text" data-tya-in="note" maxlength="1000" value="${escapeHtml(s.admin_note || '')}"></label>
+      <div class="ty-actions">
+        <button type="button" class="btn sm ghost-plain danger" data-tya="delete">Delete</button>
+        ${s.status !== 'released' ? '<button type="button" class="btn sm ghost-plain" data-tya="reject">Reject</button>' : ''}
+        <button type="button" class="btn primary sm" data-tya="approve">${s.status === 'approved' || s.status === 'released' ? 'Save approved version' : 'Approve for the next release'}</button>
+      </div></td></tr>`;
+  }).join('') : '<tr><td colspan="6" class="muted">No transaction types submitted yet.</td></tr>';
+}
+
+function accTypeFromForm(tr, s) {
+  const get = (k) => (tr.querySelector(`[data-tya-in="${k}"]`) || {}).value;
+  const base = s.approved_def || { name: s.name, base: s.base, cls: s.cls, proc: s.proc, fields: s.fields, description: s.description };
+  const fields = {};
+  for (const [n, r] of Object.entries(base.fields || {})) {
+    if (r.mode === 'remove') { fields[n] = r; continue; }
+    const i = tr.querySelector(`[data-tya-field="${n}"]`);
+    if (i) fields[n] = { mode: 'fixed', value: i.value };
+  }
+  return { global_id: (get('global_id') || '').trim().toUpperCase(), note: (get('note') || '').trim(),
+    def: { name: (get('name') || '').trim(), base: base.base, cls: base.cls, proc: (get('proc') || '').trim(), fields, ...(base.description ? { description: base.description } : {}) } };
+}
+
+$('typeSubList').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-tya]');
+  if (!b) return;
+  const tr = b.closest('tr'), id = Number(tr.dataset.id), s = (acc.types || []).find(x => x.id === id);
+  if (!s) return;
+  const act = b.dataset.tya;
+  if (act === 'toggle') { tyAdminOpen = tyAdminOpen === id ? null : id; accRenderTypes(); return; }
+  if (act === 'dropfield') {
+    const def = s.approved_def || { name: s.name, base: s.base, cls: s.cls, proc: s.proc, fields: { ...s.fields }, description: s.description };
+    def.fields = { ...def.fields }; delete def.fields[b.dataset.n];
+    s.approved_def = def; accRenderTypes(); return;
+  }
+  const sb = AGENT.supabase && AGENT.supabase();
+  if (!sb) return;
+  let patch;
+  if (act === 'delete') {
+    if (!confirm(`Delete the submission "${s.name}"? ${s.status === 'released' ? 'Already shipped types stay in released versions.' : ''}`)) return;
+    const { error } = await sb.from('type_submissions').delete().eq('id', id);
+    if (error) { toast(error.message, 'bad'); return; }
+    tyAdminOpen = null; return accLoadTypes();
+  }
+  const f = accTypeFromForm(tr, s);
+  if (act === 'reject') {
+    if (!f.note) { toast('Add a note so the submitter knows why', 'bad'); return; }
+    patch = { status: 'rejected', admin_note: f.note, decided_at: new Date().toISOString() };
+  } else {
+    if (!/^[A-Z][A-Z0-9_]{1,40}$/.test(f.global_id)) { toast('The id is capital letters, digits and _ (e.g. G_CARDLESS_WITHDRAWAL)', 'bad'); return; }
+    if (!/^\d{6}$/.test(f.def.proc)) { toast('The processing code is 6 digits', 'bad'); return; }
+    if (f.def.name.length < 2) { toast('Give it a name', 'bad'); return; }
+    const masked = Object.entries(f.def.fields).filter(([, r]) => r.mode === 'fixed' && !s.shared_values && r.value === tyMask(r.value) && /[A9]/.test(r.value.replace(/\{[^}]*\}/g, '')));
+    if (masked.length && !confirm(`${masked.map(([n]) => 'F' + n).join(', ')} still ${masked.length > 1 ? 'hold' : 'holds'} the masked pattern. Ship ${masked.length > 1 ? 'them' : 'it'} like that?`)) return;
+    patch = { status: s.status === 'released' ? 'released' : 'approved', approved_def: f.def, global_id: f.global_id, admin_note: f.note || null, decided_at: new Date().toISOString() };
+  }
+  const { error } = await sb.from('type_submissions').update(patch).eq('id', id);
+  if (error) { toast(/duplicate key|unique/i.test(error.message) ? 'That id is already used by another approved type' : error.message, 'bad'); return; }
+  toast(act === 'reject' ? 'Rejected' : 'Approved: the next build ships it as a built-in type', 'ok');
+  accLoadTypes();
+});
+$('typesReleaseBtn').addEventListener('click', async () => {
+  const v = $('typesReleaseVer').value.trim();
+  if (!/^\d+\.\d+\.\d+$/.test(v)) { toast('Enter the release, e.g. 1.4.5', 'bad'); return; }
+  const sb = AGENT.supabase && AGENT.supabase();
+  const { error } = await sb.from('type_submissions').update({ status: 'released', release: v }).eq('status', 'approved');
+  if (error) { toast(error.message, 'bad'); return; }
+  toast(`Marked as released in ${v}`, 'ok');
+  accLoadTypes();
+});
+
 // ---------- Which SwitchProof runs on this PC ----------
 async function showAgentVersion(info) {
   if (!info) { try { info = await (await AGENT.apiFetch('/api/agent')).json(); } catch (e) { return; } }
   const v = info && info.version;
   if (!v) return;
+  ty.agentVersion = v;
   $('acctVer').textContent = 'SwitchProof ' + v + ' on this PC';
   const newer = AGENT.updateFor && AGENT.updateFor(v);
   $('updateItem').hidden = !newer;

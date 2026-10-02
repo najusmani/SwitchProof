@@ -1486,3 +1486,56 @@ body.doc-page { background: var(--bg); color: var(--text); min-height: 100vh; di
 .si-result td.si-wrap { white-space: normal; min-width: 240px; line-height: 1.45; }
 @media (max-width: 700px) { .si-log li { grid-template-columns: 1fr; gap: 0; } .si-step-body, .si-done { margin-left: 0; } }
 @media (max-width: 960px) { .si-layout { grid-template-columns: 1fr; padding: 16px; } }
+
+/* Your own transaction types */
+.types-dlg { width: min(1080px, calc(100vw - 32px)); }
+.ty-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 20px; margin-top: 12px; }
+.ty-list .acc-h { margin-top: 16px; }
+.ty-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ty-item { display: grid; gap: 3px; width: 100%; text-align: left; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); cursor: pointer; font: inherit; }
+.ty-item.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.ty-item b { font-weight: 500; font-size: 13px; }
+.ty-item .mono { font-size: 11px; }
+.ty-item .pill { justify-self: start; }
+.ty-fields-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 8px 0 6px; }
+.ty-table td { vertical-align: top; }
+.ty-table .sub, #typeSubList .sub { font-size: 11px; color: var(--muted); }
+.ty-val { width: 100%; min-width: 140px; }
+.ty-table td.acc-actions { white-space: nowrap; }
+.ty-table td.acc-actions .link-btn { display: block; margin: 0 0 4px; }
+.ty-add { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 8px; margin: 10px 0 4px; }
+.ty-error { color: var(--bad); font-size: 12.5px; margin: 8px 0; }
+.ty-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.ty-status { margin-right: auto; font-size: 12.5px; color: var(--muted); }
+.ty-submit { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 12px; }
+.ty-submit h3 { font-size: 14px; font-weight: 500; margin: 0 0 6px; }
+.ty-json { background: var(--input); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; font: 12px/1.45 var(--mono); max-height: 220px; overflow: auto; white-space: pre-wrap; }
+.ty-kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 14px; font-size: 12px; margin-top: 6px; }
+.ty-review td { background: var(--input); }
+@media (max-width: 960px) { .ty-layout { grid-template-columns: 1fr; } .ty-items { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); } }
+
+/* Sources: where transactions come from */
+.src-box { margin-top: 8px; }
+.src-dlg { width: min(1180px, calc(100vw - 32px)); }
+.src-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); margin-top: 14px; padding-top: 12px; }
+.src-summary b { font-weight: 500; font-size: 13.5px; }
+.src-head { display: grid; gap: 2px; margin-bottom: 8px; }
+.src-head b { font-weight: 500; font-size: 13.5px; }
+.src-table input, .src-table select { width: 100%; min-width: 0; }
+.src-table td { vertical-align: top; }
+.src-table .w-card { min-width: 150px; } .src-table .w-id { min-width: 90px; } .src-table .w-3 { min-width: 64px; } .src-table .w-4 { min-width: 56px; }
+.src-table td:first-child input { min-width: 120px; }
+.src-table select[data-k="kind"] { min-width: 130px; } .src-table select[data-k="posting"] { min-width: 150px; }
+.src-table th em { font-style: normal; color: var(--muted); font-weight: 400; }
+.src-need td { background: var(--warn-soft); }
+.src-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.src-actions .saved-note { margin-left: auto; }
+.src-pick { margin: 10px 0 0; max-width: 360px; }
+.bi-opts { grid-column: 2 / 4; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.bi-opts select { max-width: 200px; }
+.src-table tr.src-main td { border-bottom: 0; padding-bottom: 2px; }
+.src-table tr.src-ccy td { padding-top: 0; }
+.src-ccy-line { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; font-size: 12px; color: var(--muted); }
+.src-ccy-line > span { display: inline-flex; align-items: center; gap: 6px; }
+.src-ccy-line em { font-style: normal; font-size: 11px; }
+.src-table .w-ccy { width: 64px; min-width: 64px; } .src-table .w-rate { width: 96px; min-width: 96px; }
