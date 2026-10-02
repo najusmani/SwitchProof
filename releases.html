@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Releases · SwitchProof</title>
+<meta name="description" content="What changed in each SwitchProof release: ISO 8583 load, UAT and stand-in testing for card switches.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=20261001211513">
+<script>try { var t = JSON.parse(localStorage.getItem('ss.theme')); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
+</head>
+<body class="doc-page">
+
+<header class="doc-top"><div class="doc-top-in">
+  <a class="doc-brand" href="./"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="2"/><path d="M6 15.5l3.5-6 3 4.5 2.2-3.2L18 15.5"/></svg>SwitchProof</a>
+  <nav class="doc-nav" aria-label="SwitchProof">
+    <a href="releases.html" aria-current="page">Releases</a><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a><a href="./">Sign in</a>
+  </nav>
+</div></header>
+
+<main class="doc wide">
+  <h1>Releases</h1>
+  <p class="doc-lead">What changed in each version of SwitchProof. The website always runs the latest release; the agent on your PC asks to update when it's older than the website needs.</p>
+  <p class="rel-current" id="relCurrent" hidden>Latest download: <b id="relLatest"></b></p>
+
+  <nav class="rel-index" aria-label="Versions">
+    <a href="#v1.4.5">1.4.5</a><a href="#v1.4.4">1.4.4</a><a href="#v1.4.3">1.4.3</a><a href="#v1.4.2">1.4.2</a><a href="#v1.4.1">1.4.1</a><a href="#v1.4.0">1.4.0</a><a href="#v1.3.0">1.3.0</a><a href="#early">Before 1.3.0</a>
+  </nav>
+
+  <section class="rel" id="v1.4.5">
+    <div class="rel-head"><h2>1.4.5</h2><span class="rel-date">1 October 2026</span><span class="rel-tag">Your own types, sources and currencies</span></div>
+    <h3>Your own transaction types <span class="rel-plan">Team</span></h3>
+    <ul>
+      <li>Design a transaction type from a built-in one: its own name, message class (x100, x120, x200, x220), processing code and fields. Add, change or leave out any field; values can use placeholders such as <code>{random:8}</code>, <code>{date:MMdd}</code>, <code>{account}</code> and <code>{amount}</code>.</li>
+      <li>A live preview shows the exact message for the active switch, field by field, and flags values that don't fit the field. Test send one message before you save.</li>
+      <li>Saved types work straight away in load tests, bundles and UAT cases. Money moves as in the type they started from, so reversals, settlements and money checks work the same.</li>
+      <li>Submit a type for approval to have it shipped as a built-in type for everyone. Only its structure is sent; fixed values are masked unless you choose to share them.</li>
+    </ul>
+    <h3>Sources: where a transaction comes from</h3>
+    <ul>
+      <li>Ready-made sources per switch: on-us, remote on-us, off-us, international and our card abroad. Each sets the card (F2), acquirer (F32) and, if needed, forwarding institution, terminal, merchant type (F18) and entry mode (F22).</li>
+      <li>Pick a source for a run, for each bundle row or for each UAT step. Results and reports are grouped by source.</li>
+      <li>The money check compares the switch's on-us / off-us decision with the source, so a card or BIN set up wrongly on the switch is caught.</li>
+    </ul>
+    <h3>Currencies</h3>
+    <ul>
+      <li>Settlement amount and currency with their rate (F5, F50, F9) and cardholder billing amount and currency with their rate (F6, F51, F10), set per source.</li>
+      <li>The money check understands converted postings: it shows the rate the core used, compares the debit with the billed amount, and flags a posting that wasn't converted at all.</li>
+    </ul>
+  </section>
+
+  <section class="rel" id="v1.4.4">
+    <div class="rel-head"><h2>1.4.4</h2><span class="rel-date">27 September 2026</span></div>
+    <ul>
+      <li>Stand-in simulation always shows the switch address it actually sends to, even if the target is edited partway through a rehearsal.</li>
+      <li>The Feedback tabs (Board, My requests, New request) switch correctly again.</li>
+    </ul>
+  </section>
+
+  <section class="rel" id="v1.4.3">
+    <div class="rel-head"><h2>1.4.3</h2><span class="rel-date">27 September 2026</span><span class="rel-tag">Stand-in simulation</span></div>
+    <h3>Core banking cutover rehearsal <span class="rel-plan">Enterprise</span></h3>
+    <ul>
+      <li>Eight steps, each a button as on the night: switch to stand-in, positive balance file, transactions at the switch, connect the new core, samples, release the queue, reconcile, fully online.</li>
+      <li>The simulated switch approves or declines in stand-in on its own rules and the positive balance file (51 not enough balance, 61 over a stand-in limit, 91 no balance record), and queues what it approved.</li>
+      <li>The queue is released as advices (0220, 0120, 0420) with the repeats a switch sends when it gets no answer (0221, 0121, 0421), in time order and without overtaking.</li>
+      <li>Transactions that began in the legacy core: reversals of withdrawals approved just before the cut-off, and completions of holds the migration brought over. A force-post test sends a withdrawal above the balance.</li>
+      <li>Reconciliation of every RRN (posted once, reversals, holds, value dates), of each account (balance before plus what the switch approved equals balance after) and of the switch's totals against the GLs.</li>
+      <li>Replays of up to 30,000 advices, several in flight, with a "must finish within" target and a live projection. Printable report and CSV.</li>
+    </ul>
+  </section>
+
+  <section class="rel" id="v1.4.2">
+    <div class="rel-head"><h2>1.4.2</h2><span class="rel-date">27 September 2026</span></div>
+    <ul>
+      <li>UAT: Settle and Reverse steps can act on any transaction by its RRN (Of RRN), including one from an earlier run or found in the switch log, not only the step above.</li>
+      <li>The original data element (F90) of settlements and reversals is always complete.</li>
+    </ul>
+  </section>
+
+  <section class="rel" id="v1.4.1">
+    <div class="rel-head"><h2>1.4.1</h2><span class="rel-date">27 September 2026</span></div>
+    <ul>
+      <li>Money check for off-us cards: GL-to-GL postings are recognised and each GL is shown with its name.</li>
+      <li>The version is shown in the agent and on the download page.</li>
+      <li>The installer closes a running agent, upgrades it and starts it again.</li>
+      <li>Launch offer for card plans: 50% off every month.</li>
+    </ul>
+  </section>
+
+  <section class="rel" id="v1.4.0">
+    <div class="rel-head"><h2>1.4.0</h2><span class="rel-date">27 September 2026</span><span class="rel-tag">Plans and money checks</span></div>
+    <ul>
+      <li>SwitchProof moves to <a href="https://switchproof.online/">switchproof.online</a>.</li>
+      <li>Plans: Free, Team and Enterprise. Buy by card with monthly billing and a free trial, or ask for an invoice with "Talk to us". My plan shows what your plan includes; invite codes can be redeemed there.</li>
+      <li>Money checks <span class="rel-plan">Enterprise</span>: with read-only access to the bank database, every RRN of a load test or UAT run is checked for its holds, postings and balances.</li>
+      <li>Pricing, terms, privacy and refund pages.</li>
+    </ul>
+  </section>
+
+  <section class="rel" id="v1.3.0">
+    <div class="rel-head"><h2>1.3.0</h2><span class="rel-date">25 September 2026</span></div>
+    <ul>
+      <li>Bundles <span class="rel-plan">Team</span>: several transaction types in one load test, in the shares you set, each optionally reversed or settled straight after approval. Presets: balance-neutral, ATM day and POS day.</li>
+      <li>An agent older than the website needs is asked to update before it's used.</li>
+    </ul>
+  </section>
+
+  <section class="rel" id="early">
+    <div class="rel-head"><h2>Before 1.3.0</h2><span class="rel-date">24 – 25 September 2026</span><span class="rel-tag">First releases</span></div>
+    <ul>
+      <li>Load tests against an ISO 8583 switch: number of transactions, duration and concurrency, with live throughput and response-time chart, response codes, errors and recent transactions.</li>
+      <li>UAT: a library of test cases with steps and expected response codes, runs with evidence, printable reports and CSV exports.</li>
+      <li>Transaction types for ATM and POS, completions and reversals; ISO 8583:1987, 1993 and 2003 message formats.</li>
+      <li>Open transactions: settle or reverse approved transactions one by one or in bulk.</li>
+      <li>A warning when a switch is still set to the sample card number and acquirer.</li>
+      <li>Plain explanations when the switch drops connections under load.</li>
+      <li>Feedback board for feature requests, changes and problem reports, with votes.</li>
+      <li>Windows installer with Java built in: the agent runs on your PC and connects the website to your switch; nothing about your tests leaves your PC.</li>
+    </ul>
+  </section>
+</main>
+
+<footer class="doc-foot"><div class="doc-foot-in">
+  <span>SwitchProof is provided by Najeebullah Usmani · <a href="mailto:najusmani@gmail.com">najusmani@gmail.com</a></span>
+  <a href="releases.html">Releases</a><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a>
+</div></footer>
+
+<script src="config.js?v=20261001211513"></script>
+<script>
+// The version in the current download, from the site's own settings.
+(function () {
+  var v = (window.SWITCHPROOF_CONFIG || {}).agentVersion;
+  if (!v) return;
+  document.getElementById('relLatest').textContent = v;
+  document.getElementById('relCurrent').hidden = false;
+  var s = document.getElementById('v' + v);
+  if (s) s.classList.add('rel-latest');
+})();
+</script>
+</body>
+</html>

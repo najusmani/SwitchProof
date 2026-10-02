@@ -1539,3 +1539,20 @@ body.doc-page { background: var(--bg); color: var(--text); min-height: 100vh; di
 .src-ccy-line > span { display: inline-flex; align-items: center; gap: 6px; }
 .src-ccy-line em { font-style: normal; font-size: 11px; }
 .src-table .w-ccy { width: 64px; min-width: 64px; } .src-table .w-rate { width: 96px; min-width: 96px; }
+
+/* Releases page */
+.rel-current { color: var(--muted); font-size: 13.5px; margin: -14px 0 18px; }
+.rel-index { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 26px; }
+.rel-index a { font: 500 12.5px var(--mono); padding: 4px 9px; border: 1px solid var(--border); border-radius: 999px; text-decoration: none; color: var(--muted); }
+.rel-index a:hover { color: var(--text); border-color: var(--border-strong); }
+.rel { border-left: 2px solid var(--border); padding: 2px 0 6px 18px; margin: 0 0 30px; scroll-margin-top: 70px; }
+.rel.rel-latest { border-left-color: var(--accent); }
+.rel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: 4px; }
+.doc .rel-head h2 { font: 500 24px/1.2 var(--serif); margin: 0; }
+.rel-date { color: var(--muted); font-size: 13px; }
+.rel-tag { font: 500 11px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }
+.rel.rel-latest .rel-head::after { content: "Latest"; font: 500 11px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--on-accent); background: var(--accent); border-radius: 999px; padding: 2px 8px; }
+.rel-plan { font: 500 10.5px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; margin-left: 4px; vertical-align: 1px; }
+.doc .rel h3 { margin-top: 14px; }
+.doc .rel code { font: 12.5px var(--mono); background: var(--input); padding: 1px 4px; border-radius: 3px; }
+.gx-new { text-decoration: underline; text-underline-offset: 3px; }
