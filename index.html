@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261001211513">
+<link rel="stylesheet" href="style.css?v=20261001212531">
 </head>
 <body>
 
@@ -67,6 +67,7 @@
     <div class="acct-menu" id="acctMenu" role="menu" aria-label="Account" hidden>
       <div class="acct-head"><span class="acct-label">Signed in as</span><span class="user-email" id="userEmail"></span><span class="acct-ver" id="acctVer"></span></div>
       <button type="button" role="menuitem" class="acct-item" id="fbOpen" title="Request a feature or report a problem">Feedback<span class="fb-badge" id="fbBadge" hidden></span></button>
+      <a role="menuitem" class="acct-item" href="releases.html" target="_blank" rel="noopener" title="What changed in each version">What's new<span class="acct-ver-tag" id="acctNewVer"></span></a>
       <button type="button" role="menuitem" class="acct-item" id="accessOpen" hidden title="Grant plans and make invite codes">Access<span class="fb-badge" id="accBadge" hidden></span></button>
       <button type="button" role="menuitem" class="acct-item acct-update" id="updateItem" hidden title="Download the installer: it closes SwitchProof, updates it and starts it again">Update SwitchProof<span class="fb-badge" id="updateBadge"></span></button>
       <div class="acct-sep" role="separator"></div>
@@ -669,6 +670,7 @@
         <span class="brand-name">SwitchProof</span>
       </div>
 
+      <a class="gx-new-rel" id="gxNewRel" href="releases.html"><span class="gx-new-dot" aria-hidden="true"></span><span id="gxNewRelText">What's new in SwitchProof</span><span aria-hidden="true">&rarr;</span></a>
       <p class="gx-kicker">ISO 8583 &middot; Oracle FLEXCUBE ATM &amp; POS switch</p>
       <h1 class="gx-title">Functional, UAT and load testing for your card switch.</h1>
       <p class="gx-lead">Send real ISO&nbsp;8583 traffic to the switch, check every response against what you expect, and keep evidence of each result for sign&#8209;off.</p>
@@ -698,7 +700,7 @@
       </dl>
 
       <p class="gx-foot">For use with the Oracle FLEXCUBE ATM/POS switch. Not affiliated with Oracle; Oracle and FLEXCUBE are trademarks of Oracle Corporation.</p>
-      <nav class="gx-legal" aria-label="Plans and policies"><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a><a href="mailto:najusmani@gmail.com">Contact</a></nav>
+      <nav class="gx-legal" aria-label="Plans and policies"><a href="releases.html">Releases</a><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a><a href="mailto:najusmani@gmail.com">Contact</a></nav>
     </div>
   </aside>
 
@@ -1140,8 +1142,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20261001211513"></script>
-<script src="agent.js?v=20261001211513"></script>
-<script src="app.js?v=20261001211513"></script>
+<script src="config.js?v=20261001212531"></script>
+<script src="agent.js?v=20261001212531"></script>
+<script src="app.js?v=20261001212531"></script>
 </body>
 </html>

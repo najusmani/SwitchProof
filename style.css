@@ -1556,3 +1556,9 @@ body.doc-page { background: var(--bg); color: var(--text); min-height: 100vh; di
 .doc .rel h3 { margin-top: 14px; }
 .doc .rel code { font: 12.5px var(--mono); background: var(--input); padding: 1px 4px; border-radius: 3px; }
 .gx-new { text-decoration: underline; text-underline-offset: 3px; }
+
+.gx-new-rel { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 18px; padding: 5px 12px 5px 10px; border: 1px solid var(--border); border-radius: 999px; font: 500 12.5px var(--font); color: var(--text); text-decoration: none; background: var(--surface); }
+.gx-new-rel:hover { border-color: var(--border-strong); }
+.gx-new-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+a.acct-item { text-decoration: none; }
+.acct-ver-tag { font: 500 11px var(--mono); color: var(--muted); }
