@@ -168,7 +168,6 @@ const AGENT = (() => {
       const r = await downloadInstaller();
       msg(msgId, r.error || '', r.error ? 'bad' : '');
     }
-    if (cfg.agentVersion && $g('gxNewRelText')) $g('gxNewRelText').textContent = "What's new in SwitchProof " + cfg.agentVersion;
     if (cfg.agentVersion && $g('acctNewVer')) $g('acctNewVer').textContent = cfg.agentVersion;
     if (cfg.agentVersion) {   // the version in the download
       for (const [btn, note] of [['gcDownload', 'gcVer'], ['guDownload', 'guVer']]) {

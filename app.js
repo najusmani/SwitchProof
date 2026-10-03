@@ -3906,3 +3906,451 @@ AGENT.ready.then((info) => {
   loadAuthorizations();
   setInterval(loadAuthorizations, 5000);
 });
+
+// ---------- Videos (account menu): learning videos for signed-in users ----------
+// Who sees what is enforced by Supabase (tools/supabase-videos.sql): the list and the files are only given to signed-in
+// users, and only admins can add, change or delete. Watched marks and positions stay in this browser.
+const VIDEOS = (() => {
+  const BUCKET = 'videos';
+  const LINK_TTL = 4 * 3600;   // seconds a play link works; renewed if it runs out mid-video
+  const FREE_MAX = 50 * 1024 * 1024;   // Supabase free plan: largest file Storage accepts
+  const TOO_BIG = 'The file is larger than Supabase allows on this plan (50 MB on the free plan). Compress it, for example to 720p.';
+  const tooBig = (why) => /maximum allowed size|too large|payload too large|413/i.test(why || '');
+  let sb = null, admin = false, videos = [], posters = {}, current = null, editing = null, picked = null, uploading = false;
+  let watched = store.get('learn.watched', {}), positions = store.get('learn.pos', {});
+
+  function dur(s) {
+    if (!s && s !== 0) return '';
+    s = Math.round(s);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = String(s % 60).padStart(2, '0');
+    return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`;
+  }
+  const mb = (n) => n < 1048576 ? Math.max(1, Math.round(n / 1024)) + ' KB' : (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + ' MB';
+  function msg(id, text, kind) { $(id).textContent = text || ''; $(id).className = 'lv-msg' + (kind ? ' ' + kind : ''); }
+  function loadScript(src) {
+    return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = fail; document.head.appendChild(s); });
+  }
+  function state(text) {
+    $('lvState').hidden = !text;
+    $('lvState').textContent = text || '';
+    if (text) { $('lvGrid').hidden = true; $('lvEmpty').hidden = true; }
+  }
+
+  async function open() {
+    sb = AGENT.supabase && AGENT.supabase();
+    if (!sb) { toast('Videos are available when you are signed in on the SwitchProof website.', 'bad'); return; }
+    $('vidDlg').showModal();
+    if (!videos.length) state('Loading videos…');
+    const r = await sb.rpc('is_admin');
+    admin = !r.error && r.data === true;
+    $('lvAdd').hidden = !admin;
+    await reload(current && current.id);
+  }
+  function close() {
+    stopPlayer();
+    current = null;
+  }
+
+  // ---------- the list ----------
+  async function reload(keepId) {
+    const { data, error } = await sb.from('videos')
+      .select('id, title, description, section, position, source, path, poster, youtube_id, duration_s, size_bytes, published')
+      .order('position').order('created_at');
+    state('');
+    if (error) {
+      const missing = fbTableMissing(error);
+      videos = [];
+      $('lvAdminNote').hidden = !(admin && missing);
+      $('lvAdminNote').textContent = 'Videos are not set up yet: run tools/supabase-videos.sql in the Supabase SQL editor, then open Videos again.';
+      $('lvAdd').hidden = true;
+      render(missing ? 'No videos yet.' : 'Could not load the videos: ' + error.message);
+      return;
+    }
+    $('lvAdminNote').hidden = true;
+    videos = data || [];
+    const want = videos.filter(v => v.poster).map(v => v.poster);
+    posters = {};
+    if (want.length) {
+      const s = await sb.storage.from(BUCKET).createSignedUrls(want, LINK_TTL);
+      for (const x of (s.data || [])) if (x.signedUrl) posters[x.path] = x.signedUrl;
+    }
+    render();
+    const pick = videos.find(v => v.id === keepId) || videos.find(v => v.id === store.get('learn.last')) ||
+                 videos.find(v => !watched[v.id]) || videos[0];
+    if (!pick) return;
+    if (current && current.id === pick.id && $('lvPlayer').firstChild) { current = pick; showInfo(pick); render(); }   // edited or moved: keep playing
+    else select(pick, false);
+  }
+
+  /** Sections in the order of their first video. */
+  function sections() {
+    const out = [];
+    for (const v of videos) {
+      let s = out.find(x => x.name === v.section);
+      if (!s) out.push(s = { name: v.section, items: [] });
+      s.items.push(v);
+    }
+    return out;
+  }
+  function thumb(v) {
+    if (v.source === 'youtube') return `https://i.ytimg.com/vi/${encodeURIComponent(v.youtube_id)}/mqdefault.jpg`;
+    return v.poster ? posters[v.poster] || '' : '';
+  }
+
+  function render(emptyText) {
+    const visible = videos.filter(v => v.published);
+    const done = visible.filter(v => watched[v.id]).length;
+    $('lvSub').textContent = visible.length
+      ? `${visible.length} video${visible.length === 1 ? '' : 's'} · ${done} watched` + (admin && videos.length > visible.length ? ` · ${videos.length - visible.length} hidden from users` : '')
+      : '';
+    $('lvGrid').hidden = !videos.length;
+    $('lvEmpty').hidden = !!videos.length;
+    $('lvEmpty').textContent = emptyText || (admin ? 'No videos yet. Press Add video to upload the first one.' : 'No videos yet. Check back soon.');
+    $('vdSections').innerHTML = sections().map(s => `<option value="${escapeHtml(s.name)}">`).join('');
+    $('lvList').innerHTML = sections().map((s) => `
+      <div class="lv-group">
+        <p class="lv-group-name">${escapeHtml(s.name)}</p>
+        <ol>${s.items.map((v, i) => `
+          <li class="lv-item${current && current.id === v.id ? ' on' : ''}${v.published ? '' : ' hidden-v'}">
+            <button type="button" class="lv-item-btn" data-play="${v.id}">
+              <span class="lv-thumb">${thumb(v) ? `<img src="${escapeHtml(thumb(v))}" alt="" loading="lazy">` : ''}<span class="lv-dur">${escapeHtml(dur(v.duration_s))}</span></span>
+              <span class="lv-item-text"><b>${escapeHtml(v.title)}</b><span>${watched[v.id] ? '<i class="lv-tick">Watched</i>' : positions[v.id] > 5 ? `<i>${escapeHtml(dur(positions[v.id]))} in</i>` : ''}${v.published ? '' : '<i class="lv-hid">Hidden</i>'}</span></span>
+            </button>
+            ${admin ? `<span class="lv-tools">
+              <button type="button" class="t-mini" data-move="${v.id}" data-dir="-1" title="Move up"${i === 0 ? ' disabled' : ''}>&uarr;</button>
+              <button type="button" class="t-mini" data-move="${v.id}" data-dir="1" title="Move down"${i === s.items.length - 1 ? ' disabled' : ''}>&darr;</button>
+              <button type="button" class="t-mini" data-edit="${v.id}" title="Edit">Edit</button></span>` : ''}
+          </li>`).join('')}</ol>
+      </div>`).join('');
+  }
+
+  // ---------- the player ----------
+  let saveTimer = 0, renewing = false;
+  function stopPlayer() {
+    const vid = $('lvPlayer').querySelector('video');
+    if (vid) { remember(vid); vid.pause(); vid.removeAttribute('src'); vid.load(); }
+    $('lvPlayer').innerHTML = '';
+  }
+  function remember(vid) {
+    if (!current || !vid || !isFinite(vid.currentTime)) return;
+    positions[current.id] = vid.currentTime > 5 && vid.duration && vid.currentTime < vid.duration - 10 ? Math.floor(vid.currentTime) : 0;
+    store.set('learn.pos', positions);
+  }
+  function setWatched(id, on) {
+    if (on) watched[id] = true; else delete watched[id];
+    store.set('learn.watched', watched);
+    if (current && current.id === id) $('lvDone').checked = on;
+    render();
+  }
+  function showInfo(v) {
+    $('lvSec').textContent = v.section;
+    $('lvTitle').textContent = v.title;
+    $('lvMeta').textContent = [dur(v.duration_s), v.published ? '' : 'Hidden from users'].filter(Boolean).join(' · ');
+    $('lvDesc').textContent = v.description || '';
+    $('lvDone').checked = !!watched[v.id];
+    const at = videos.indexOf(v);
+    $('lvPrev').disabled = at <= 0;
+    $('lvNext').disabled = at < 0 || at >= videos.length - 1;
+  }
+
+  async function select(v, play) {
+    if (!v) return;
+    stopPlayer();
+    current = v;
+    store.set('learn.last', v.id);
+    showInfo(v);
+    render();
+    const box = $('lvPlayer');
+    if (v.source === 'youtube') {
+      box.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(v.youtube_id)}?rel=0${play ? '&autoplay=1' : ''}" title="${escapeHtml(v.title)}"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`;
+      return;
+    }
+    box.innerHTML = '<p class="lv-loading">Loading video…</p>';
+    const link = await sb.storage.from(BUCKET).createSignedUrl(v.path, LINK_TTL);
+    if (current !== v) return;   // another video was picked meanwhile, or the dialog closed
+    if (link.error) { box.innerHTML = `<p class="lv-loading bad">Could not open this video: ${escapeHtml(link.error.message)}</p>`; return; }
+    const vid = document.createElement('video');
+    vid.controls = true; vid.playsInline = true; vid.preload = 'metadata';
+    vid.setAttribute('controlsList', 'nodownload');
+    vid.addEventListener('contextmenu', (e) => e.preventDefault());
+    if (v.poster && posters[v.poster]) vid.poster = posters[v.poster];
+    vid.src = link.data.signedUrl;
+    const resume = positions[v.id] || 0;
+    vid.addEventListener('loadedmetadata', () => { if (resume && resume < vid.duration - 10) vid.currentTime = resume; }, { once: true });
+    vid.addEventListener('timeupdate', () => {
+      if (Date.now() - saveTimer > 5000) { saveTimer = Date.now(); remember(vid); }
+      if (vid.duration && vid.currentTime / vid.duration > 0.9 && !watched[v.id]) setWatched(v.id, true);
+    });
+    vid.addEventListener('pause', () => remember(vid));
+    vid.addEventListener('ended', () => { setWatched(v.id, true); positions[v.id] = 0; store.set('learn.pos', positions); });
+    // A link that ran out (a long pause): get a new one and carry on from the same second.
+    vid.addEventListener('error', async () => {
+      if (renewing || current !== v) return;
+      renewing = true;
+      const at = vid.currentTime, again = await sb.storage.from(BUCKET).createSignedUrl(v.path, LINK_TTL);
+      renewing = false;
+      if (again.error || current !== v) return;
+      vid.src = again.data.signedUrl;
+      vid.addEventListener('loadedmetadata', () => { vid.currentTime = at; vid.play().catch(() => {}); }, { once: true });
+    });
+    box.innerHTML = '';
+    box.appendChild(vid);
+    if (play) vid.play().catch(() => { /* the browser wants a click first */ });
+  }
+  function step(d) {
+    const at = videos.indexOf(current);
+    if (videos[at + d]) select(videos[at + d], true);
+  }
+
+  // ---------- admins: add, edit, reorder, delete ----------
+  async function move(id, dir) {
+    const v = videos.find(x => x.id === id);
+    const peers = videos.filter(x => x.section === v.section), other = peers[peers.indexOf(v) + dir];
+    if (!other) return;
+    // Renumber so the two can always swap, even when positions were equal.
+    const all = videos.slice(), i = all.indexOf(v), j = all.indexOf(other);
+    [all[i], all[j]] = [all[j], all[i]];
+    for (const c of all.map((x, n) => ({ x, pos: (n + 1) * 10 })).filter(c => c.x.position !== c.pos)) {
+      const r = await sb.from('videos').update({ position: c.pos, updated_at: new Date().toISOString() }).eq('id', c.x.id);
+      if (r.error) { toast('Could not reorder: ' + r.error.message, 'bad'); break; }
+    }
+    await reload(current && current.id);
+  }
+
+  const srcKind = () => document.querySelector('input[name="vdSrc"]:checked').value;
+  function syncSrc() {
+    $('vdFileBox').hidden = !!editing || srcKind() !== 'file';
+    $('vdYtBox').hidden = !!editing || srcKind() !== 'youtube';
+  }
+  function openEditor(v) {
+    editing = v || null;
+    picked = null;
+    $('lvDlgTitle').textContent = v ? 'Edit video' : 'Add video';
+    $('vdTitle').value = v ? v.title : '';
+    $('vdSection').value = v ? v.section : (videos.length ? videos[videos.length - 1].section : 'Getting started');
+    $('vdDesc').value = v ? v.description || '' : '';
+    $('vdPublished').checked = v ? v.published : true;
+    $('vdSrcSet').hidden = !!v;
+    $('vdFile').value = '';
+    $('vdYt').value = '';
+    $('vdFileInfo').textContent = 'MP4 (H.264) or WebM, up to 50 MB on the free Supabase plan: export or compress to 720p.';
+    $('vdFileInfo').className = 'lv-file-info';
+    $('vdPoster').hidden = true;
+    $('vdExisting').hidden = !v;
+    $('vdExisting').textContent = v ? (v.source === 'youtube' ? 'YouTube video ' + v.youtube_id : 'Uploaded file' + (v.size_bytes ? ' · ' + mb(v.size_bytes) : '') + (v.duration_s ? ' · ' + dur(v.duration_s) : '')) : '';
+    $('vdDelete').hidden = !v;
+    $('vdProgress').hidden = true;
+    $('vdSave').disabled = false;
+    msg('vdMsg', '');
+    syncSrc();
+    $('lvDlg').showModal();
+  }
+
+  /** Reads the length and a still frame of the chosen file, in the browser. */
+  function readFile() {
+    const f = $('vdFile').files[0];
+    picked = null;
+    $('vdPoster').hidden = true;
+    if (!f) return;
+    picked = { file: f, duration: null, poster: null };
+    const info = $('vdFileInfo');
+    info.textContent = `${f.name} · ${mb(f.size)}` + (f.size > FREE_MAX ? ' · above 50 MB: the free Supabase plan will refuse it' : '');
+    info.className = 'lv-file-info' + (f.size > FREE_MAX ? ' warn' : '');
+    const url = URL.createObjectURL(f), probe = document.createElement('video');
+    probe.muted = true; probe.preload = 'metadata'; probe.src = url;
+    probe.addEventListener('loadedmetadata', () => {
+      const d = isFinite(probe.duration) ? probe.duration : 0;   // some recorders leave the length out
+      if (d && picked && picked.file === f) { picked.duration = Math.round(d); info.textContent += ' · ' + dur(d); }
+      probe.currentTime = d ? Math.min(5, d * 0.1) : 0.5;
+    }, { once: true });
+    probe.addEventListener('seeked', () => {
+      const w = 640, h = Math.round(w * (probe.videoHeight || 360) / (probe.videoWidth || 640));
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      try { c.getContext('2d').drawImage(probe, 0, 0, w, h); } catch (e) { URL.revokeObjectURL(url); return; }
+      c.toBlob((b) => {
+        URL.revokeObjectURL(url);
+        if (!b || !picked || picked.file !== f) return;
+        picked.poster = b;
+        $('vdPoster').src = URL.createObjectURL(b);
+        $('vdPoster').hidden = false;
+      }, 'image/jpeg', 0.82);
+    }, { once: true });
+    probe.addEventListener('error', () => { URL.revokeObjectURL(url); info.textContent += ' · this browser cannot read it; MP4 (H.264) plays everywhere'; info.className = 'lv-file-info warn'; }, { once: true });
+  }
+
+  function youtubeId(s) {
+    s = (s || '').trim();
+    if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
+    const m = s.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([A-Za-z0-9_-]{11})/);
+    return m ? m[1] : null;
+  }
+
+  function progress(done, total) {
+    $('vdProgress').hidden = false;
+    $('vdProgress').firstElementChild.style.width = (total ? Math.round(100 * done / total) : 0) + '%';
+  }
+  /** Large files go up in 6 MB pieces (Supabase resumable upload), so a dropped connection resumes. */
+  async function uploadFile(path, file) {
+    const type = /\.webm$/.test(path) ? 'video/webm' : 'video/mp4';   // the bucket takes only these (and the poster jpeg)
+    const { data } = await sb.auth.getSession();
+    const token = data.session && data.session.access_token;
+    let tus = window.tus;
+    if (!tus) {
+      try { await loadScript('https://cdn.jsdelivr.net/npm/tus-js-client@4.3.1/dist/tus.min.js'); tus = window.tus; } catch (e) { /* plain upload below */ }
+    }
+    if (!tus || !tus.isSupported) {
+      const r = await sb.storage.from(BUCKET).upload(path, file, { contentType: type, upsert: false });
+      if (r.error) throw new Error(tooBig(r.error.message) ? TOO_BIG : r.error.message);
+      return;
+    }
+    const cfg = window.SWITCHPROOF_CONFIG || {};
+    const endpoint = String(cfg.supabaseUrl || '').replace(/\/+$/, '') + '/storage/v1/upload/resumable';
+    try {
+      await resumable(tus, endpoint, token, cfg.supabaseAnonKey, path, file, type);
+    } catch (e) {
+      if (e.message === TOO_BIG) throw e;
+      // Resumable upload refused for another reason: one plain upload before giving up.
+      progress(0, 1);
+      const r = await sb.storage.from(BUCKET).upload(path, file, { contentType: type, upsert: false });
+      if (r.error) throw new Error(tooBig(r.error.message) ? TOO_BIG : r.error.message + ' (resumable upload: ' + e.message + ')');
+      progress(1, 1);
+    }
+  }
+  function resumable(tus, endpoint, token, apikey, path, file, type) {
+    return new Promise((ok, fail) => {
+      const up = new tus.Upload(file, {
+        endpoint,
+        retryDelays: [0, 3000, 5000, 10000, 20000],
+        headers: { authorization: 'Bearer ' + token, apikey, 'x-upsert': 'false' },
+        uploadDataDuringCreation: true,
+        removeFingerprintOnSuccess: true,
+        metadata: { bucketName: BUCKET, objectName: path, contentType: type, cacheControl: '3600' },
+        chunkSize: 6 * 1024 * 1024,   // Supabase requires exactly 6 MB pieces
+        onProgress: progress,
+        onError: (e) => {
+          const body = e && e.originalResponse && e.originalResponse.getBody && e.originalResponse.getBody();
+          let why = e && e.message || String(e);
+          try { const j = JSON.parse(body); why = j.message || j.error || why; } catch (x) { /* not JSON */ }
+          fail(new Error(tooBig(why) ? TOO_BIG : why));
+        },
+        onSuccess: ok,
+      });
+      up.findPreviousUploads().then((prev) => { if (prev.length) up.resumeFromPreviousUpload(prev[0]); up.start(); });
+    });
+  }
+
+  async function save(e) {
+    e.preventDefault();
+    if (uploading) return;
+    const row = {
+      title: $('vdTitle').value.trim(),
+      section: $('vdSection').value.trim() || 'Getting started',
+      description: $('vdDesc').value.trim() || null,
+      published: $('vdPublished').checked,
+    };
+    if (row.title.length < 2) { msg('vdMsg', 'Give the video a title.', 'bad'); return; }
+    if (editing) {
+      const r = await sb.from('videos').update(Object.assign(row, { updated_at: new Date().toISOString() })).eq('id', editing.id);
+      if (r.error) { msg('vdMsg', r.error.message, 'bad'); return; }
+      $('lvDlg').close();
+      await reload(editing.id);
+      return;
+    }
+    const id = crypto.randomUUID();
+    row.id = id;
+    if (srcKind() === 'youtube') {
+      const yt = youtubeId($('vdYt').value);
+      if (!yt) { msg('vdMsg', 'That is not a YouTube link.', 'bad'); return; }
+      Object.assign(row, { source: 'youtube', youtube_id: yt });
+    } else {
+      if (!picked) { msg('vdMsg', 'Choose a video file.', 'bad'); return; }
+      const ext = /webm$/i.test(picked.file.type || picked.file.name) ? 'webm' : 'mp4';
+      Object.assign(row, { source: 'file', path: `v/${id}.${ext}`, duration_s: picked.duration, size_bytes: picked.file.size });
+      uploading = true;
+      $('vdSave').disabled = true;
+      msg('vdMsg', 'Uploading… keep this window open.');
+      progress(0, 1);
+      try {
+        await uploadFile(row.path, picked.file);
+        if (picked.poster) {
+          const p = await sb.storage.from(BUCKET).upload(`p/${id}.jpg`, picked.poster, { contentType: 'image/jpeg', upsert: true });
+          if (!p.error) row.poster = `p/${id}.jpg`;
+        }
+      } catch (err) {
+        uploading = false;
+        $('vdSave').disabled = false;
+        $('vdProgress').hidden = true;
+        msg('vdMsg', 'Upload failed: ' + err.message, 'bad');
+        return;
+      }
+      uploading = false;
+    }
+    // A new video joins the end of its section, so sections keep their order.
+    const last = videos.filter(v => v.section === row.section).pop();
+    row.position = last ? last.position + 1 : videos.reduce((m, v) => Math.max(m, v.position), 0) + 10;
+    if (last) for (const v of videos.filter(x => x.position > last.position)) await sb.from('videos').update({ position: v.position + 10 }).eq('id', v.id);
+    const r = await sb.from('videos').insert(row);
+    $('vdSave').disabled = false;
+    if (r.error) {
+      if (row.path) await sb.storage.from(BUCKET).remove([row.path].concat(row.poster ? [row.poster] : []));
+      msg('vdMsg', r.error.message, 'bad');
+      return;
+    }
+    $('lvDlg').close();
+    await reload(id);
+  }
+
+  async function remove() {
+    const v = editing;
+    if (!v || !confirm(`Delete "${v.title}"? The file is removed from Storage and can't be brought back.`)) return;
+    if (v.source === 'file') {
+      const r = await sb.storage.from(BUCKET).remove([v.path].concat(v.poster ? [v.poster] : []));
+      if (r.error) { msg('vdMsg', 'Could not delete the file: ' + r.error.message, 'bad'); return; }
+    }
+    const r = await sb.from('videos').delete().eq('id', v.id);
+    if (r.error) { msg('vdMsg', r.error.message, 'bad'); return; }
+    $('lvDlg').close();
+    if (current && current.id === v.id) { stopPlayer(); current = null; }
+    await reload();
+  }
+
+  $('vidOpen').addEventListener('click', open);
+  $('vidClose').addEventListener('click', () => $('vidDlg').close());
+  $('vidDlg').addEventListener('close', close);
+  $('lvList').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.play) select(videos.find(v => v.id === b.dataset.play), true);
+    else if (b.dataset.edit) openEditor(videos.find(v => v.id === b.dataset.edit));
+    else if (b.dataset.move) move(b.dataset.move, +b.dataset.dir);
+  });
+  $('lvDone').addEventListener('change', () => { if (current) setWatched(current.id, $('lvDone').checked); });
+  $('lvPrev').addEventListener('click', () => step(-1));
+  $('lvNext').addEventListener('click', () => step(1));
+  $('lvAdd').addEventListener('click', () => openEditor(null));
+  document.querySelectorAll('input[name="vdSrc"]').forEach(r => r.addEventListener('change', syncSrc));
+  $('lvDlg').querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => { if (!uploading) $('lvDlg').close(); }));
+  $('lvDlg').addEventListener('cancel', (e) => { if (uploading) e.preventDefault(); });
+  $('vidDlg').addEventListener('cancel', (e) => { if (uploading) e.preventDefault(); });
+  $('vdFile').addEventListener('change', readFile);
+  $('lvDlgForm').addEventListener('submit', save);
+  $('vdDelete').addEventListener('click', remove);
+  window.addEventListener('pagehide', () => remember($('lvPlayer').querySelector('video')));
+  return { open };
+})();
+
+// ---------- Releases (account menu): what changed in each version ----------
+$('relOpen').addEventListener('click', () => {
+  const latest = (window.SWITCHPROOF_CONFIG || {}).agentVersion;
+  document.querySelectorAll('#relBody .rel').forEach(s => s.classList.toggle('rel-latest', !!latest && s.id === 'rel-' + latest));
+  $('relDlg').showModal();
+  $('relBody').scrollTop = 0;
+});
+$('relClose').addEventListener('click', () => $('relDlg').close());
+$('relIndex').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rel]');
+  const s = b && document.getElementById('rel-' + b.dataset.rel);
+  if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
