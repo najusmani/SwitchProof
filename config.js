@@ -5,7 +5,7 @@ window.SWITCHPROOF_CONFIG = {
   supabaseUrl: 'https://ekkftykqwrzkheaqqwne.supabase.co',
   supabaseAnonKey: 'sb_publishable_1-0edWNZ0Yf2WL5wzr8Iyw_PZD7l3Gn',   // public by design; access is enforced by Supabase policies
   downloadBucket: 'downloads',
-  downloadPath: 'switchproof-agent.jar',
+  downloadPath: 'SwitchProof-Setup.exe',
   minAgentVersion: '1.4.5',   // older installed agents must update before using the site
   agentVersion: '1.4.5',   // the version in the download (shown on the download and update screens)
   agentUrl: 'http://127.0.0.1:8787',
