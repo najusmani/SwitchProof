@@ -19,6 +19,11 @@ const AGENT = (() => {
     set(k, v) { try { v == null ? localStorage.removeItem('ss.agent.' + k) : localStorage.setItem('ss.agent.' + k, v); } catch (e) { /* storage unavailable */ } },
   };
 
+  // Back from an email link (Supabase): a password reset (#...type=recovery), or a link that no longer works
+  // (#error=...&error_code=otp_expired...). Read before the sign-in library takes the tokens out of the address.
+  const linkParams = new URLSearchParams(location.hash.slice(1) + '&' + location.search.slice(1));
+  const emailLink = { recovery: linkParams.get('type') === 'recovery', error: linkParams.get('error_description') || linkParams.get('error') || '', code: linkParams.get('error_code') || '' };
+
   // The agent opens the site with #agent=...&pair=...; keep them and clear the address bar.
   const hash = new URLSearchParams(location.hash.slice(1));
   if (hash.get('pair')) {
@@ -124,14 +129,33 @@ const AGENT = (() => {
     try {
       await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.min.js');
       sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+      sb.auth.onAuthStateChange((event) => { if (event === 'PASSWORD_RECOVERY') emailLink.recovery = true; });
     } catch (e) {
       show('login');
       msg('glMsg', 'Could not load the sign-in service. Check your connection and reload.', 'bad');
       return;
     }
     const { data } = await sb.auth.getSession();
-    if (!data.session) { show('login'); return; }
+    if (emailLink.error || emailLink.recovery) history.replaceState(null, '', location.pathname);   // no tokens or errors left in the address bar
+    if (!data.session) {
+      show('login');
+      if (emailLink.error) {
+        msg('glMsg', emailLink.code === 'otp_expired' || /expired|invalid/i.test(emailLink.error)
+          ? 'That email link has expired or was already used: each link works once. Enter your email and press Forgot password? for a new one.'
+          : "The email link didn't work: " + emailLink.error, 'bad');
+      }
+      return;
+    }
+    if (emailLink.recovery) { showReset(data.session.user); return; }
     await connect();
+  }
+
+  /** Signed in by a password-reset link: choose the new password before anything else. */
+  function showReset(user) {
+    show('reset');
+    $g('grUser').value = (user && user.email) || '';
+    msg('grMsg', '');
+    setTimeout(() => $g('grPass').focus(), 50);
   }
 
   function wireGate() {
@@ -160,7 +184,17 @@ const AGENT = (() => {
       const email = $g('glEmail').value.trim();
       if (!email) { msg('glMsg', 'Enter your email first.', 'bad'); return; }
       const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
-      msg('glMsg', error ? error.message : 'Password reset email sent.', error ? 'bad' : 'ok');
+      msg('glMsg', error ? error.message : 'Check your email for a link to choose a new password. Use the newest email: each link works once.', error ? 'bad' : 'ok');
+    });
+    $g('grForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if ($g('grPass').value !== $g('grPass2').value) { msg('grMsg', "The two passwords don't match.", 'bad'); return; }
+      msg('grMsg', 'Saving…');
+      const { error } = await sb.auth.updateUser({ password: $g('grPass').value });
+      if (error) { msg('grMsg', error.message, 'bad'); return; }
+      emailLink.recovery = false;
+      msg('grMsg', 'Password changed.', 'ok');
+      await connect();
     });
 
     async function download(msgId) {

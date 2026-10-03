@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261003002345">
+<link rel="stylesheet" href="style.css?v=20261003003626">
 </head>
 <body>
 
@@ -723,6 +723,19 @@
         </div>
       </section>
 
+      <section class="gate-step" data-step="reset" hidden>
+        <p class="gx-eyebrow">Account</p>
+        <h2>Choose a new password</h2>
+        <form id="grForm" autocomplete="on">
+          <input type="email" id="grUser" autocomplete="username" hidden>
+          <label class="gx-field"><span>New password <em>at least 8 characters</em></span><input type="password" id="grPass" required minlength="8" autocomplete="new-password"></label>
+          <label class="gx-field"><span>Repeat the new password</span><input type="password" id="grPass2" required minlength="8" autocomplete="new-password"></label>
+          <div class="gate-msg" id="grMsg" aria-live="polite"></div>
+          <button class="gx-btn" type="submit">Save new password</button>
+        </form>
+        <div class="gate-links"><button type="button" class="gx-link" data-signout>Cancel and sign out</button></div>
+      </section>
+
       <section class="gate-step" data-step="connect" hidden>
         <p class="gx-eyebrow">Set up</p>
         <h2>Connect your agent</h2>
@@ -1360,8 +1373,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20261003002345"></script>
-<script src="agent.js?v=20261003002345"></script>
-<script src="app.js?v=20261003002345"></script>
+<script src="config.js?v=20261003003626"></script>
+<script src="agent.js?v=20261003003626"></script>
+<script src="app.js?v=20261003003626"></script>
 </body>
 </html>
