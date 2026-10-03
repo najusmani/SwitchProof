@@ -4623,7 +4623,7 @@ const EMAIL_PREF = (() => {
   q.delete('unsubscribed');
   history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
   const text = ok ? "You're unsubscribed: no more emails about SwitchProof videos and releases. Signed-in users can turn them back on under Update emails in the account menu."
-                  : "That unsubscribe link didn't work. Write to najusmani@gmail.com and we'll take you off the list.";
+                  : "That unsubscribe link didn't work. Write to support@switchproof.online and we'll take you off the list.";
   $('gxNotice').textContent = text;
   $('gxNotice').className = 'gx-notice' + (ok ? '' : ' bad');
   $('gxNotice').hidden = false;
