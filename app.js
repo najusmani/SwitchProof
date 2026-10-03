@@ -3314,6 +3314,7 @@ function accTabs(tab) {
   acc.tab = tab;
   document.querySelectorAll('[data-acc-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.accTab === tab)));
   document.querySelectorAll('[data-acc-pane]').forEach(p => { p.hidden = p.dataset.accPane !== tab; });
+  if (tab === 'emails') EMAILS.load();
 }
 
 function accRender() {
@@ -4354,3 +4355,277 @@ $('relIndex').addEventListener('click', (e) => {
   const s = b && document.getElementById('rel-' + b.dataset.rel);
   if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
+
+// ---------- Access -> Emails (admins): tell users about new videos and releases ----------
+// The Edge Function send-updates does the sending (Resend), works out who gets it and leaves out whoever
+// unsubscribed; this tab only drafts the email and shows the history. Needs tools/supabase-emails.sql.
+const EMAILS = (() => {
+  const em = { accounts: null, videos: [], picked: new Set(), loaded: false };
+  const FIELDS = ['emSubject', 'emEyebrow', 'emCtaLabel', 'emCtaUrl', 'emHeadline', 'emIntro', 'emBody'];
+  const PLAN_NAMES = { free: 'Free', team: 'Team', enterprise: 'Enterprise' };
+  const sbc = () => AGENT.supabase && AGENT.supabase();
+  function msg(text, kind) { $('emMsg').textContent = text || ''; $('emMsg').className = 'fb-msg' + (kind ? ' ' + kind : ''); }
+
+  function audience() {
+    return {
+      all: $('emAll').checked,
+      plans: [...document.querySelectorAll('[data-em-plan]:checked')].map(c => c.dataset.emPlan),
+      users: [...em.picked],
+      extra: $('emExtra').value.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean),
+    };
+  }
+  /** The same rule the function uses, for the live count: chosen accounts and addresses minus the unsubscribed. */
+  function recipients() {
+    const a = audience(), out = new Map(), off = new Set();
+    for (const u of em.accounts || []) {
+      if (u.opted_out) off.add(u.email);
+      if (a.all || a.plans.includes(u.plan) || em.picked.has(u.email)) out.set(u.email, true);
+    }
+    const bad = [];
+    for (const e of a.extra) { const l = e.toLowerCase(); if (/^[^@\s,;<>"']+@[^@\s,;<>"']+\.[^@\s,;<>"']+$/.test(l)) out.set(l, true); else bad.push(e); }
+    const list = [...out.keys()].filter(e => !off.has(e));
+    return { count: list.length, skipped: out.size - list.length, bad };
+  }
+  function count() {
+    const r = recipients();
+    $('emPicked').textContent = em.picked.size ? `${em.picked.size} picked` : '';
+    const parts = [r.count ? `${r.count} ${r.count === 1 ? 'person' : 'people'} will get this` : 'Choose who gets this'];
+    if (r.skipped) parts.push(`${r.skipped} unsubscribed left out`);
+    if (r.bad.length) parts.push(`not addresses: ${r.bad.slice(0, 3).join(', ')}`);
+    if (r.count > 100) parts.push('above 100: the free Resend plan sends 100 a day, the rest will fail');
+    $('emCount').textContent = parts.join(' · ');
+    $('emCount').className = 'em-count' + (r.bad.length || r.count > 100 ? ' warn' : '');
+    $('emSend').textContent = r.count ? `Send to ${r.count}` : 'Send';
+    return r;
+  }
+
+  function renderUsers() {
+    const q = $('emSearch').value.trim().toLowerCase();
+    const list = (em.accounts || []).filter(u => !q || u.email.includes(q));
+    $('emUsers').innerHTML = em.accounts === null ? '<p class="muted">Loading…</p>' : list.length ? list.slice(0, 300).map(u => `
+      <label class="em-user${u.opted_out ? ' off' : ''}"><input type="checkbox" data-em-user="${escapeHtml(u.email)}"${em.picked.has(u.email) ? ' checked' : ''}${u.opted_out ? ' disabled' : ''}>
+        <span class="em-mail">${escapeHtml(u.email)}</span><span class="em-tag">${u.opted_out ? 'unsubscribed' : escapeHtml(PLAN_NAMES[u.plan] || u.plan)}</span></label>`).join('')
+      + (list.length > 300 ? `<p class="muted">${list.length - 300} more: search to narrow down</p>` : '')
+      : '<p class="muted">No accounts match.</p>';
+  }
+
+  function audienceText(a, test) {
+    if (test) return 'Test to me';
+    if (!a) return '';
+    const parts = [];
+    if (a.all) parts.push('All users');
+    if (a.plans && a.plans.length) parts.push(a.plans.map(p => PLAN_NAMES[p] || p).join(', '));
+    if (a.users && a.users.length) parts.push(`${a.users.length} picked`);
+    if (a.extra && a.extra.length) parts.push(`${a.extra.length} other`);
+    return parts.join(' + ');
+  }
+  async function loadHistory() {
+    const sb = sbc();
+    const { data, error } = await sb.from('email_sends').select('id, created_at, subject, audience, recipients, sent, failed, error, test').order('created_at', { ascending: false }).limit(50);
+    $('emHistory').innerHTML = error ? `<tr><td colspan="5" class="muted">${escapeHtml(error.message)}</td></tr>`
+      : (data || []).length ? data.map(s => `<tr${s.test ? ' class="row-muted"' : ''}>
+          <td class="mono">${escapeHtml(new Date(s.created_at).toLocaleString())}</td><td>${escapeHtml(s.subject)}</td>
+          <td>${escapeHtml(audienceText(s.audience, s.test))}</td><td class="num">${s.sent}</td>
+          <td class="num"${s.error ? ` title="${escapeHtml(s.error)}"` : ''}>${s.failed ? `<span class="bad-t">${s.failed}</span>` : '0'}</td></tr>`).join('')
+      : '<tr><td colspan="5" class="muted">Nothing sent yet.</td></tr>';
+  }
+
+  /** "Start from": a release from the Releases dialog, or one of the videos. */
+  function fillFromOptions() {
+    const rels = [...document.querySelectorAll('#relBody .rel')].filter(s => /^rel-\d/.test(s.id)).slice(0, 6);
+    $('emFrom').innerHTML = '<option value="">A blank email</option>'
+      + `<optgroup label="Releases">${rels.map(s => `<option value="${escapeHtml(s.id)}">Release ${escapeHtml(s.id.slice(4))}</option>`).join('')}</optgroup>`
+      + (em.videos.length ? `<optgroup label="Videos">${em.videos.map(v => `<option value="video:${v.id}">Video: ${escapeHtml(v.title)}</option>`).join('')}</optgroup>` : '');
+    const keep = $('emImage').value;
+    $('emImage').innerHTML = '<option value="">No picture</option>' + em.videos.filter(v => v.poster).map(v => `<option value="${v.id}">${escapeHtml(v.title)}</option>`).join('');
+    $('emImage').value = em.videos.some(v => v.id === keep && v.poster) ? keep : '';
+  }
+  function set(fields) { for (const [id, v] of Object.entries(fields)) $(id).value = v || ''; }
+  function draftFrom(value) {
+    const site = 'https://switchproof.online/';
+    if (value.startsWith('rel-')) {
+      const s = document.getElementById(value);
+      if (!s) return;
+      const ver = value.slice(4), tag = s.querySelector('.rel-tag'), lines = [];
+      let card = false;
+      for (const el of s.querySelectorAll(':scope > h4, :scope > ul')) {
+        if (el.tagName === 'H4') {
+          const h = el.cloneNode(true), plans = [...h.querySelectorAll('.rel-plan')].map(p => p.textContent.trim());
+          h.querySelectorAll('.rel-plan').forEach(p => p.remove());
+          lines.push('', '## ' + h.textContent.replace(/\s+/g, ' ').trim() + (plans.length ? ` [${plans[0]}]` : ''));
+          card = true;
+        } else {
+          if (!card) { lines.push('', `## What's changed`); card = true; }
+          for (const li of el.querySelectorAll('li')) {
+            const c = li.cloneNode(true);
+            c.querySelectorAll('.rel-plan').forEach(p => { p.textContent = `(${p.textContent.trim()})`; });
+            lines.push('- ' + c.textContent.replace(/\s+/g, ' ').trim());
+          }
+        }
+      }
+      lines.push('', '> **Updating:** sign in at switchproof.online and SwitchProof offers the update in the account menu (Update SwitchProof). Every release is listed under Releases in the same menu.');
+      set({
+        emSubject: `SwitchProof ${ver}` + (tag ? `: ${tag.textContent.trim()}` : ' is out'),
+        emEyebrow: `Release ${ver}`,
+        emHeadline: tag ? tag.textContent.trim() : `SwitchProof ${ver} is here`,
+        emIntro: `SwitchProof ${ver} is out. Here's what's new for testing your card switch.`,
+        emCtaLabel: "See what's new", emCtaUrl: site,
+        emBody: lines.join('\n').trim(),
+      });
+      $('emImage').value = '';
+    } else if (value.startsWith('video:')) {
+      const v = em.videos.find(x => 'video:' + x.id === value);
+      if (!v) return;
+      set({
+        emSubject: `New video: ${v.title}`,
+        emEyebrow: 'New video',
+        emHeadline: v.title,
+        emIntro: (v.description || 'A new step-by-step video is ready for you.').replace(/\s*\n\s*/g, ' '),
+        emCtaLabel: 'Watch the video', emCtaUrl: site,
+        emBody: ['## Where to find it', 'Sign in at switchproof.online and choose **Videos** in the account menu: the round button with your initial, top right. Each video remembers where you stopped.', '',
+          '> SwitchProof needs to be running on your PC for the account menu to appear.'].join('\n'),
+      });
+      $('emImage').value = v.poster ? v.id : '';
+    }
+  }
+
+  async function load() {
+    const sb = sbc();
+    if (!sb) return;
+    if (!em.loaded) { em.accounts = null; renderUsers(); }
+    const [aud, vids] = await Promise.all([
+      sb.rpc('email_audience'),
+      sb.from('videos').select('id, title, description, published, poster').eq('published', true).order('position'),
+    ]);
+    if (aud.error) {
+      em.accounts = [];
+      renderUsers();
+      msg(fbTableMissing(aud.error) ? 'Emails are not set up yet: run tools/supabase-emails.sql in Supabase.' : aud.error.message, 'bad');
+      return;
+    }
+    em.accounts = aud.data || [];
+    em.videos = vids.error ? [] : (vids.data || []);
+    em.loaded = true;
+    fillFromOptions();
+    renderUsers();
+    count();
+    msg('');
+    loadHistory();
+  }
+
+  /** Calls the Edge Function; its error message comes back in the response body. */
+  async function call(mode) {
+    const sb = sbc();
+    const subject = $('emSubject').value.trim(), message = $('emBody').value.trim();
+    if (!subject) { msg('Write a subject.', 'bad'); return null; }
+    if (!message && !$('emIntro').value.trim()) { msg('Write the intro or the message.', 'bad'); return null; }
+    const design = {
+      eyebrow: $('emEyebrow').value.trim(), headline: $('emHeadline').value.trim(), intro: $('emIntro').value.trim(),
+      cta: { label: $('emCtaLabel').value.trim(), url: $('emCtaUrl').value.trim() }, videoId: $('emImage').value || undefined,
+    };
+    const { data, error } = await sb.functions.invoke('send-updates', { body: { mode, subject, message, design, audience: audience() } });
+    if (error) {
+      let why = error.message;
+      try { const j = await error.context.json(); if (j && j.error) why = j.error; } catch (e) { /* no JSON body */ }
+      if (/Failed to send a request|not found|404/i.test(why)) why = 'The send-updates function is not deployed yet in Supabase (Edge Functions).';
+      msg(why, 'bad');
+      return null;
+    }
+    return data;
+  }
+  async function busy(btn, fn) {
+    document.querySelectorAll('.em-actions .btn').forEach(b => { b.disabled = true; });
+    try { await fn(); } finally { document.querySelectorAll('.em-actions .btn').forEach(b => { b.disabled = false; }); }
+  }
+
+  $('emFrom').addEventListener('change', () => {
+    if (!$('emFrom').value) return;
+    if (FIELDS.some(id => $(id).value.trim()) && !confirm('Replace what you have written with this draft?')) { $('emFrom').value = ''; return; }
+    draftFrom($('emFrom').value);
+    $('emFrom').value = '';
+    $('emPreviewBox').hidden = true;
+  });
+  ['emAll', 'emExtra'].forEach(id => $(id).addEventListener('input', count));
+  document.querySelectorAll('[data-em-plan]').forEach(c => c.addEventListener('change', count));
+  $('emSearch').addEventListener('input', renderUsers);
+  $('emUsers').addEventListener('change', (e) => {
+    const c = e.target.closest('[data-em-user]');
+    if (!c) return;
+    if (c.checked) em.picked.add(c.dataset.emUser); else em.picked.delete(c.dataset.emUser);
+    count();
+  });
+  $('emPreview').addEventListener('click', () => busy($('emPreview'), async () => {
+    msg('Preparing the preview…');
+    const d = await call('preview');
+    if (!d) return;
+    msg('');
+    $('emPreviewTo').textContent = `· goes to ${d.count} ${d.count === 1 ? 'person' : 'people'}${d.skipped ? `, ${d.skipped} unsubscribed left out` : ''}: ${d.recipients.slice(0, 8).join(', ')}${d.count > 8 ? ', …' : ''}`;
+    $('emFrame').srcdoc = d.html;
+    $('emPreviewBox').hidden = false;
+  }));
+  $('emTest').addEventListener('click', () => busy($('emTest'), async () => {
+    msg('Sending a test to you…');
+    const d = await call('test');
+    if (!d) return;
+    msg(d.sent ? 'Test sent: check your inbox (and spam folder).' : 'The test was not sent: ' + (d.error || 'unknown reason'), d.sent ? 'ok' : 'bad');
+    loadHistory();
+  }));
+  $('emSend').addEventListener('click', () => busy($('emSend'), async () => {
+    const r = count();
+    if (!r.count) { msg('Choose who gets the email.', 'bad'); return; }
+    if (r.bad.length) { msg('Fix the other addresses first: ' + r.bad.slice(0, 3).join(', '), 'bad'); return; }
+    if (!confirm(`Send "${$('emSubject').value.trim()}" to ${r.count} ${r.count === 1 ? 'person' : 'people'}? Emails can't be called back.`)) return;
+    msg('Sending…');
+    const d = await call('send');
+    if (!d) return;
+    msg(d.failed ? `Sent to ${d.sent}; ${d.failed} failed: ${d.error || ''}` : `Sent to ${d.sent} ${d.sent === 1 ? 'person' : 'people'}.`, d.failed ? 'bad' : 'ok');
+    loadHistory();
+  }));
+  return { load };
+})();
+
+// ---------- Account menu: Update emails on / off (for every signed-in user) ----------
+const EMAIL_PREF = (() => {
+  let off = false, me = '';
+  function show() {
+    $('emPrefState').textContent = off ? 'Off' : 'On';
+    $('emPrefItem').setAttribute('aria-checked', String(!off));
+  }
+  async function load() {
+    const sb = AGENT.supabase && AGENT.supabase(), user = sb && await signedInUser();
+    if (!user || !user.email) { $('emPrefItem').hidden = true; return; }
+    me = user.email.toLowerCase();
+    const { data, error } = await sb.from('email_optouts').select('email').eq('email', me);
+    $('emPrefItem').hidden = !!error;   // not set up yet (tools/supabase-emails.sql)
+    if (error) return;
+    off = (data || []).length > 0;
+    show();
+  }
+  $('acctBtn').addEventListener('click', () => { if (!$('acctMenu').hidden) load(); });
+  $('emPrefItem').addEventListener('click', async () => {
+    const sb = AGENT.supabase && AGENT.supabase();
+    if (!sb || !me) return;
+    const r = off ? await sb.from('email_optouts').delete().eq('email', me)
+                  : await sb.from('email_optouts').insert({ email: me, source: 'menu' });
+    if (r.error) { toast('Could not change it: ' + r.error.message, 'bad'); return; }
+    off = !off;
+    show();
+    toast(off ? "You won't get emails about new videos and releases." : "You'll get an email when there's a new video or release.", 'ok');
+  });
+  return { load };
+})();
+
+// Back from an unsubscribe link in an email (switchproof.online/?unsubscribed=1).
+(function unsubscribedNotice() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has('unsubscribed')) return;
+  const ok = q.get('unsubscribed') === '1';
+  q.delete('unsubscribed');
+  history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+  const text = ok ? "You're unsubscribed: no more emails about SwitchProof videos and releases. Signed-in users can turn them back on under Update emails in the account menu."
+                  : "That unsubscribe link didn't work. Write to najusmani@gmail.com and we'll take you off the list.";
+  $('gxNotice').textContent = text;
+  $('gxNotice').className = 'gx-notice' + (ok ? '' : ' bad');
+  $('gxNotice').hidden = false;
+  toast(text, ok ? 'ok' : 'bad');
+})();

@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261002225020">
+<link rel="stylesheet" href="style.css?v=20261002234429">
 </head>
 <body>
 
@@ -69,6 +69,7 @@
       <button type="button" role="menuitem" class="acct-item" id="fbOpen" title="Request a feature or report a problem">Feedback<span class="fb-badge" id="fbBadge" hidden></span></button>
       <button type="button" role="menuitem" class="acct-item" id="vidOpen" title="Step-by-step videos on using SwitchProof">Videos</button>
       <button type="button" role="menuitem" class="acct-item" id="relOpen" title="What changed in each version">Releases<span class="acct-ver-tag" id="acctNewVer"></span></button>
+      <button type="button" role="menuitemcheckbox" aria-checked="true" class="acct-item" id="emPrefItem" hidden title="Emails about new videos and releases">Update emails<span class="acct-ver-tag" id="emPrefState"></span></button>
       <button type="button" role="menuitem" class="acct-item" id="accessOpen" hidden title="Grant plans and make invite codes">Access<span class="fb-badge" id="accBadge" hidden></span></button>
       <button type="button" role="menuitem" class="acct-item acct-update" id="updateItem" hidden title="Download the installer: it closes SwitchProof, updates it and starts it again">Update SwitchProof<span class="fb-badge" id="updateBadge"></span></button>
       <div class="acct-sep" role="separator"></div>
@@ -706,6 +707,7 @@
 
   <main class="gx-main">
     <div class="gx-panel">
+      <p class="gx-notice" id="gxNotice" hidden></p>
       <section class="gate-step" data-step="login" hidden>
         <p class="gx-eyebrow">Account</p>
         <h2 id="glTitle">Sign in</h2>
@@ -1028,6 +1030,7 @@
     <button type="button" class="fb-tab" role="tab" data-acc-tab="codes" aria-selected="false">Invite codes</button>
     <button type="button" class="fb-tab" role="tab" data-acc-tab="redeemed" aria-selected="false">Redeemed</button>
     <button type="button" class="fb-tab" role="tab" data-acc-tab="types" aria-selected="false">Types<span class="tab-count" id="typesCount"></span></button>
+    <button type="button" class="fb-tab" role="tab" data-acc-tab="emails" aria-selected="false">Emails</button>
   </div>
   <p class="fb-msg" id="accMsg"></p>
 
@@ -1092,6 +1095,50 @@
       </div>
     </div>
     <div class="table-wrap"><table class="tbl"><thead><tr><th>Sent</th><th>From</th><th>Type</th><th class="num">Fields</th><th>Status</th><th></th></tr></thead><tbody id="typeSubList"></tbody></table></div>
+  </section>
+
+  <section data-acc-pane="emails" hidden>
+    <p class="plan-sub">Tell users about new videos and releases. Each person gets their own email with an unsubscribe link, and people who unsubscribed are left out. Sent by Resend from updates@switchproof.online; replies go to you. The free Resend plan sends 100 emails a day.</p>
+    <div class="em-grid">
+      <div class="em-compose">
+        <div class="field-row two">
+          <label class="field"><span>Start from</span><select id="emFrom"><option value="">A blank email</option></select></label>
+          <label class="field"><span>Picture <em>a video's still, with a play bar</em></span><select id="emImage"><option value="">No picture</option></select></label>
+        </div>
+        <label class="field"><span>Subject <em>what people see in their inbox</em></span><input type="text" id="emSubject" maxlength="150"></label>
+        <div class="field-row three">
+          <label class="field"><span>Label <em>above the headline</em></span><input type="text" id="emEyebrow" maxlength="40" placeholder="New video"></label>
+          <label class="field"><span>Button text</span><input type="text" id="emCtaLabel" maxlength="40" placeholder="Open SwitchProof"></label>
+          <label class="field"><span>Button link</span><input type="text" id="emCtaUrl" class="mono" maxlength="500" placeholder="https://switchproof.online/"></label>
+        </div>
+        <label class="field"><span>Headline <em>the big text at the top; the subject if left empty</em></span><input type="text" id="emHeadline" maxlength="150"></label>
+        <label class="field"><span>Intro <em>under the headline; also the preview line in the inbox</em></span><textarea id="emIntro" rows="2" maxlength="800"></textarea></label>
+        <label class="field"><span>Message <em>optional</em></span><textarea id="emBody" rows="10" maxlength="20000"></textarea></label>
+        <p class="em-help"><code>## Heading</code> starts a card, <code>## Heading [Team]</code> adds a plan badge &middot; <code>- </code> a list &middot; <code>&gt; </code> a highlighted note &middot; <code>**bold**</code> &middot; <code>[text](https://&hellip;)</code> a link &middot; a blank line starts a new paragraph</p>
+      </div>
+      <div class="em-audience">
+        <p class="em-h">Send to</p>
+        <label class="em-check"><input type="checkbox" id="emAll"> All users</label>
+        <div class="em-plans"><span>Plans</span><label><input type="checkbox" data-em-plan="free"> Free</label><label><input type="checkbox" data-em-plan="team"> Team</label><label><input type="checkbox" data-em-plan="enterprise"> Enterprise</label></div>
+        <p class="em-h">Specific users <span class="muted" id="emPicked"></span></p>
+        <input type="search" id="emSearch" placeholder="Search accounts" aria-label="Search accounts">
+        <div class="em-users" id="emUsers"></div>
+        <label class="field"><span>Other addresses <em>comma or one per line; also people without an account</em></span><textarea id="emExtra" rows="2"></textarea></label>
+        <p class="em-count" id="emCount"></p>
+      </div>
+    </div>
+    <div class="em-actions">
+      <span class="fb-msg" id="emMsg"></span>
+      <button type="button" class="btn sm ghost-plain" id="emPreview">Preview</button>
+      <button type="button" class="btn sm ghost-plain" id="emTest">Send a test to me</button>
+      <button type="button" class="btn sm primary-sm" id="emSend">Send</button>
+    </div>
+    <div class="em-preview" id="emPreviewBox" hidden>
+      <p class="em-h">Preview <span class="muted" id="emPreviewTo"></span></p>
+      <iframe id="emFrame" title="Email preview" sandbox=""></iframe>
+    </div>
+    <p class="em-h">Sent</p>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>When</th><th>Subject</th><th>To</th><th class="num">Sent</th><th class="num">Failed</th></tr></thead><tbody id="emHistory"></tbody></table></div>
   </section>
 </dialog>
 
@@ -1313,8 +1360,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20261002225020"></script>
-<script src="agent.js?v=20261002225020"></script>
-<script src="app.js?v=20261002225020"></script>
+<script src="config.js?v=20261002234429"></script>
+<script src="agent.js?v=20261002234429"></script>
+<script src="app.js?v=20261002234429"></script>
 </body>
 </html>
