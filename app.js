@@ -1029,11 +1029,21 @@ function renderErrors(d) {
     return;
   }
   const dropped = entries.filter(([m]) => /^Switch .* (closed|reset|dropped|cut) the connection/.test(m)).reduce((n, e) => n + e[1], 0);
-  const hint = dropped && d.concurrency > 1
-    ? `<li class="err-hint">The switch accepted ${dropped === 1 ? 'a connection' : dropped + ' connections'} and dropped ${dropped === 1 ? 'it' : 'them'} without a reply.
+  const replies = Object.values(d.responseCodeCounts || {}).reduce((n, c) => n + c, 0);
+  const port = entries.map(([m]) => (m.match(/^Switch \S+:(\d+) /) || [])[1]).find(Boolean) || '';
+  let hint = '';
+  if (dropped && !replies) {
+    // Not one reply: the switch isn't overloaded, it doesn't understand the messages or isn't the ISO 8583 listener.
+    hint = `<li class="err-hint">Not one message got a reply, so this isn't about concurrency.
+       ${['80', '443', '8080', '8443'].includes(port) ? `Port ${port} is usually a web port. If a load balancer (such as HAProxy) listens there and passes traffic to the switch, it must pass plain TCP (HAProxy: mode tcp), not HTTP; try the switch's own address and port directly to compare. ` : ''}
+       Check the target's address and port, the message framing the switch expects (a 2-byte or 4-digit length header, any message header;
+       set in agent.properties in your SwitchProof folder), and that the switch accepts connections from this PC's IP address.
+       Send a single message (concurrency 1) after each change.</li>`;
+  } else if (dropped && d.concurrency > 1) {
+    hint = `<li class="err-hint">The switch accepted ${dropped === 1 ? 'a connection' : dropped + ' connections'} and dropped ${dropped === 1 ? 'it' : 'them'} without a reply.
        This usually means it takes fewer simultaneous connections than your concurrency of ${d.concurrency}: try a lower concurrency.
-       Dropped messages are listed in Recent transactions with their RRN, so you can check on the switch whether any were processed.</li>`
-    : '';
+       Dropped messages are listed in Recent transactions with their RRN, so you can check on the switch whether any were processed.</li>`;
+  }
   $('errorList').innerHTML = hint + entries.map(([m, n]) => `<li><b class="err-n">${n}×</b> ${escapeHtml(m)}</li>`).join('');
 }
 
@@ -1442,9 +1452,24 @@ function siPostBody() {
     amountMin: $('siMin').value.trim(), amountMax: $('siMax').value.trim(), f7: $('siF7').value,
     otherAccounts: siLines('siAccounts'), legacyReversals: siNum('siLegacyRev'),
     forceAccount: $('siForceAcct').value.trim(), forceOver: $('siForceOver').value.trim(), holds: siLines('siHolds'),
+    atm: $('siAtm').value, authBooking: $('siBooking').value,
+    legacyPos: siNum('siLegacyPos'), legacyAtm: $('siAtm').value === 'dual' ? siNum('siLegacyAtm') : 0,
   };
 }
 function siReleaseBody() { return { rate: siNum('siRate'), inFlight: siNum('siInFlight') || 1, targetMinutes: siNum('siTarget') }; }
+function siClearBody() {
+  return { how: $('siClearHow').value, clearedPct: siNum('siClearPct'), differentPct: siNum('siClearDiffPct'), differBy: siNum('siClearDiffBy') || 1, ...siReleaseBody() };
+}
+/** ATM as authorizations changes what the counts send; Legacy Core ATM withdrawals only replay then. */
+function siAuthFields() {
+  const dual = $('siAtm').value === 'dual';
+  $('siAtmMti').textContent = dual ? '0120' : '0220';
+  $('siLegacyAtm').disabled = !dual;
+  $('siLegacyNote').hidden = !(siNum('siLegacyPos') || (dual && siNum('siLegacyAtm')));
+  $('siBookingNote').textContent = $('siBooking').value === 'debit'
+    ? 'A debit: the 0120 takes the money; clearing posts only the difference (nothing at the same amount).'
+    : 'A hold: the 0120 reduces the available balance; clearing debits the final amount and releases the hold.';
+}
 
 function siDuration(ms) {
   const s = Math.max(0, Math.round(ms / 1000));
@@ -1452,15 +1477,27 @@ function siDuration(ms) {
 }
 
 function siPlanLine() {
-  const b = siPostBody(), c = b.counts;
+  siAuthFields();
+  const b = siPostBody(), c = b.counts, dual = b.atm === 'dual';
   const originals = Object.values(c).reduce((a, x) => a + x, 0) + (b.forceAccount ? 1 : 0);
   const completions = Math.round(c.PREAUTH * b.completePct / 100);
-  const reversals = Math.round((c.WITHDRAWAL + c.PURCHASE + c.TRANSFER) * b.reversePct / 100);
-  const before = b.legacyReversals + b.holds.length;
+  const reversals = Math.round(((dual ? 0 : c.WITHDRAWAL) + c.PURCHASE + c.TRANSFER) * b.reversePct / 100);
+  const before = b.legacyReversals + b.holds.length + b.legacyPos + b.legacyAtm;
   const base = originals + completions + reversals + before, repeats = Math.round(base * b.repeatPct / 100);
+  const auths = c.PREAUTH - completions + (dual ? c.WITHDRAWAL : 0) + b.legacyPos + b.legacyAtm;
   $('siPlan').textContent = originals + before
     ? `${originals.toLocaleString()} transactions reach the switch${before ? `, plus ${before.toLocaleString()} from before the cut-off` : ''}. If all are approved: about ${(base + repeats).toLocaleString()} advices, with ${completions.toLocaleString()} completions, ${reversals.toLocaleString()} reversals and ${repeats.toLocaleString()} sent twice. Declined ones aren't queued.`
+      + (auths > 0 ? ` About ${auths.toLocaleString()} authorizations stay open for clearing after go-live (step 9), booked as ${b.authBooking === 'debit' ? 'debits' : 'holds'}.` : '')
     : 'Add at least one transaction.';
+}
+
+function siClearPlanLine() {
+  const open = siLast && siLast.clearable, b = siClearBody();
+  if (!open) { $('siClearPlan').textContent = siLast && siLast.step === 8 ? 'No authorizations are left open.' : ''; return; }
+  const n = Math.round(open * b.clearedPct / 100);
+  $('siClearPlan').textContent = `${open.toLocaleString()} authorizations are open. ${n.toLocaleString()} will clear`
+    + (b.differentPct ? `; about ${b.differentPct}% of the POS ones for up to ${b.differBy}% more or less than authorized` : ', each for the authorized amount') + '.'
+    + (b.how === 'file' ? ' SwitchProof makes the list; nothing is sent.' : ` Sent as 0220s at up to ${b.rate} a second.`);
 }
 
 function siReleasePlanLine() {
@@ -1480,7 +1517,8 @@ function siReleasePlanLine() {
 
 // The numbers are remembered on this PC so a large cutover plan needn't be typed again (account numbers aren't).
 const SI_FIELDS = ['siDays', 'siNoRecord', 'siPerTxn', 'siDaily', 'siCntWITHDRAWAL', 'siCntPURCHASE', 'siCntPREAUTH', 'siCntTRANSFER', 'siComplete', 'siReverse', 'siRepeat',
-  'siMin', 'siMax', 'siF7', 'siLegacyRev', 'siForceOver', 'siSampleInq', 'siSampleAdv', 'siRate', 'siInFlight', 'siTarget', 'siOnlineInq'];
+  'siMin', 'siMax', 'siF7', 'siLegacyRev', 'siForceOver', 'siSampleInq', 'siSampleAdv', 'siRate', 'siInFlight', 'siTarget', 'siOnlineInq',
+  'siAtm', 'siBooking', 'siLegacyPos', 'siLegacyAtm', 'siClearHow', 'siClearPct', 'siClearDiffPct', 'siClearDiffBy'];
 function siRestore() {
   const saved = store.get('siForm', null);
   if (saved && typeof saved === 'object') for (const id of SI_FIELDS) if (saved[id] != null && $(id)) $(id).value = saved[id];
@@ -1573,29 +1611,37 @@ function siTile(label, value, cls) {
 }
 
 function siStatusLabel(run) {
-  if (run.status === 'RUNNING') return { text: { samples: 'SENDING SAMPLES', release: 'RELEASING', online: 'GOING ONLINE' }[run.busy] || 'RUNNING', cls: 'warn' };
-  if (run.status === 'DONE') return { text: run.kind === 'rehearsal' ? 'FULLY ONLINE' : 'DONE', cls: 'ok' };
+  if (run.status === 'RUNNING') return { text: { samples: 'SENDING SAMPLES', release: 'RELEASING', online: 'GOING ONLINE', clearing: 'CLEARING' }[run.busy] || 'RUNNING', cls: 'warn' };
+  if (run.status === 'DONE') return { text: run.kind !== 'rehearsal' ? 'DONE' : run.step >= 9 ? 'CLEARED' : 'FULLY ONLINE', cls: 'ok' };
   if (run.status === 'INTERRUPTED' || run.status === 'ERROR') return { text: run.status, cls: 'bad' };
   if (run.kind !== 'rehearsal') return { text: run.status, cls: 'neutral' };
-  return { text: (run.step || 0) <= 3 ? 'IN STAND-IN' : `STEP ${run.step} OF 8`, cls: 'neutral' };
+  return { text: (run.step || 0) <= 3 ? 'IN STAND-IN' : `STEP ${run.step} OF ${run.lastStep || 8}`, cls: 'neutral' };
 }
 
 function siRenderSteps(run) {
   const open = run && run.status !== 'DONE' && run.status !== 'INTERRUPTED' && run.kind === 'rehearsal';
   const step = run && run.kind === 'rehearsal' ? run.step || 0 : 0;
   const busy = !!(run && run.status === 'RUNNING');
-  const current = open ? Math.min(8, step + 1) : run ? 0 : 1;
+  const last = run && run.lastStep ? run.lastStep : 9;   // before a rehearsal: clearing is shown as possible
+  const current = open ? Math.min(last, step + 1) : run ? 0 : 1;
   $('siNew').hidden = !run;
   document.querySelectorAll('#siSteps .si-step').forEach(li => {
     const n = Number(li.dataset.step), done = !!run && n <= step, isCurrent = n === current;
+    li.hidden = n > last;
     li.classList.toggle('done', done);
     li.classList.toggle('current', isCurrent);
     li.classList.toggle('locked', !done && !isCurrent);
     li.querySelector('.si-step-body').hidden = !isCurrent;
-    const last = done && run.log ? [...run.log].reverse().find(l => l.step === n) : null;
-    li.querySelector('[data-done]').textContent = last ? last.text : '';
+    const entry = done && run.log ? [...run.log].reverse().find(l => l.step === n) : null;
+    li.querySelector('[data-done]').textContent = entry ? entry.text : '';
   });
-  for (const id of ['siPbfSkip', 'siPbfCore', 'siPbfUpload', 'siPost', 'siConnect', 'siSampleSkip', 'siSamples', 'siRelease', 'siOnline']) $(id).disabled = busy;
+  // Step 9: the form, or (clearing by file) the list and "loaded"
+  const c = run && run.clearing, waitingForFile = !!(c && c.how === 'file' && !c.loadedAt);
+  $('siClearForm').hidden = waitingForFile;
+  $('siClearFile').hidden = !waitingForFile;
+  if (waitingForFile) $('siClearList').href = AGENT.link('/api/standin/report?id=' + encodeURIComponent(run.id) + '&format=clearing');
+  siClearPlanLine();
+  for (const id of ['siPbfSkip', 'siPbfCore', 'siPbfUpload', 'siPost', 'siConnect', 'siSampleSkip', 'siSamples', 'siRelease', 'siOnline', 'siClear', 'siFinish', 'siCleared']) $(id).disabled = busy;
   const ms = run && run.moneyStatus;
   $('siReconNote').textContent = current !== 7 ? 'Runs by itself after the release: every RRN, each account (before + approved in stand-in = after) and the switch\'s totals against the GLs.'
     : run.status === 'RUNNING' ? 'Waiting for the release to finish…'
@@ -1618,7 +1664,7 @@ function siInquiryTable(title, rows) {
 
 function siRender(run) {
   siRenderSteps(run);
-  const parts = ['siLog', 'siSwitchBox', 'siConnectBox', 'siTiles', 'siMoney', 'siAccountsBox', 'siGlBox', 'siOnlineBox'];
+  const parts = ['siLog', 'siSwitchBox', 'siConnectBox', 'siTiles', 'siMoney', 'siAccountsBox', 'siGlBox', 'siOnlineBox', 'siClearBox'];
   if (!run) {
     $('siTitle').textContent = 'No rehearsal yet';
     $('siStatus').textContent = 'IDLE';
@@ -1636,8 +1682,9 @@ function siRender(run) {
   $('siSub').textContent = `${run.target} · started ${String(run.startedAt || '').slice(0, 19)}${run.tester ? ' · ' + run.tester : ''}`
     + (run.queueLost ? ' · The agent restarted before the queue was released: post the transactions to the switch again.' : '')
     + (run.status === 'INTERRUPTED' ? ' · The agent restarted during this rehearsal: start a new one.' : '');
-  $('siProgress').hidden = !(running && (run.busy === 'release' || run.busy === 'samples'));
-  $('siBar').style.width = (s.advices ? Math.round(100 * s.sent / s.advices) : 0) + '%';
+  const cl = run.clearing;
+  $('siProgress').hidden = !(running && (run.busy === 'release' || run.busy === 'samples' || run.busy === 'clearing'));
+  $('siBar').style.width = (run.busy === 'clearing' && cl ? (cl.total ? Math.round(100 * cl.sent / cl.total) : 0) : s.advices ? Math.round(100 * s.sent / s.advices) : 0) + '%';
   $('siStop').hidden = !running;
   const link = (fmt) => AGENT.link('/api/standin/report?id=' + encodeURIComponent(run.id) + (fmt ? '&format=' + fmt : ''));
   const hasData = step >= 3;
@@ -1662,8 +1709,13 @@ function siRender(run) {
     sw += '<h3 class="si-sub">At the switch during stand-in</h3><div class="si-tiles">' + siTile('Transactions', siFmt(sd.transactions)) + siTile('Approved', siFmt(sd.approved), 'ok')
       + siTile('Approved amount', siAmt(sd.approvedAmount)) + siTile('Declined', siFmt(sd.declined), sd.declined ? 'warn' : '') + siTile('Advices queued', siFmt(sd.queued)) + '</div>';
     const why = Object.entries(sd.declinedBy || {}).map(([c, n]) => `<span class="pill neutral code">${escapeHtml(c)}</span> ${escapeHtml(SI_REASONS[c] || '')}: ${siFmt(n)}`).join(' · ');
-    const extras = [sd.legacyReversals ? `${siFmt(sd.legacyReversals)} reversals of Legacy Core withdrawals` : '', sd.migratedHolds ? `${siFmt(sd.migratedHolds)} completions of migrated holds` : '',
-      sd.forceAccount ? `force post: ${sd.forceAccount} withdraws ${siAmt(sd.forceAmount)}, over its balance` : ''].filter(Boolean).join(' · ');
+    const set = run.settings || {};
+    const extras = [sd.legacyAuths ? `${siFmt(sd.legacyAuths)} authorizations by the Legacy Core before the cut-off (${siAmt(sd.legacyAuthAmount)}), replayed as 0120` : '',
+      sd.legacyDeclined ? `${siFmt(sd.legacyDeclined)} the Legacy Core declined (not enough balance), not replayed` : '',
+      sd.legacyReversals ? `${siFmt(sd.legacyReversals)} reversals of Legacy Core withdrawals` : '', sd.migratedHolds ? `${siFmt(sd.migratedHolds)} completions of migrated holds` : '',
+      sd.forceAccount ? `force post: ${sd.forceAccount} withdraws ${siAmt(sd.forceAmount)}, over its balance` : '',
+      set.atm === 'dual' ? 'ATM withdrawals as authorizations (0100 → 0120)' : '',
+      set.authBooking ? `the New Flexcube Core books a 0120 as a ${set.authBooking === 'debit' ? 'debit' : 'hold'}` : ''].filter(Boolean).join(' · ');
     if (why || extras) sw += `<p class="si-note">${why}${why && extras ? '<br>' : ''}${escapeHtml(extras)}</p>`;
     const dec = run.declined || [];
     if (dec.length) sw += `<details class="si-details"><summary>Declined in stand-in (${siFmt(run.declinedTotal)})</summary><div class="table-wrap"><table class="tbl"><thead><tr><th>Happened</th><th>Type</th><th>RRN</th><th>Account</th><th class="num">Amount</th><th>Reason</th></tr></thead><tbody>`
@@ -1702,6 +1754,8 @@ function siRender(run) {
         + siTile('Holds missing', siFmt(ms.blockMissing), ms.blockMissing ? 'warn' : '') + siTile('Value date differs', siFmt(ms.valueDateDiffers), ms.valueDateDiffers ? 'warn' : '');
       if (ms.legacyCredited || (run.standin && run.standin.legacyReversals)) tiles += siTile('Legacy Core withdrawals credited back', siFmt(ms.legacyCredited), 'ok');
       if (ms.holdReleased || ms.holdNotReleased) tiles += siTile('Migrated holds released', siFmt(ms.holdReleased), 'ok') + siTile('Migrated holds still open', siFmt(ms.holdNotReleased), ms.holdNotReleased ? 'bad' : '');
+      if (ms.authDebited) tiles += siTile('Authorizations debited by the 0120', siFmt(ms.authDebited), 'ok');
+      if (cl) tiles += siTile('Cleared as expected', siFmt(ms.cleared), 'ok') + siTile('Cleared wrongly', siFmt(ms.clearingWrong), ms.clearingWrong ? 'bad' : '');
     }
   }
   $('siTiles').innerHTML = tiles;
@@ -1739,8 +1793,38 @@ function siRender(run) {
       <td class="si-wrap"><span class="pill ${g.status === 'PASS' ? 'ok' : g.status === 'FAIL' ? 'bad' : 'neutral'}">${escapeHtml(g.status)}</span> <span class="muted">${escapeHtml(g.note || '')}</span></td></tr>`).join('')
     + '</tbody></table></div>' : '';
 
-  // Step 8
-  $('siOnlineBox').innerHTML = siInquiryTable('Fully online: balance inquiries against the reconciled balances', run.onlineInquiries);
+  // Step 8: what customers see, and the switch's balance file before it's refreshed
+  let ob = siInquiryTable('Fully online: balance inquiries against the reconciled balances', run.onlineInquiries);
+  const rf = run.refresh;
+  if (rf) {
+    ob += `<h3 class="si-sub">Switch balance file before it's refreshed</h3><p class="si-note">Each account at the switch at the end of stand-in, against the New Flexcube Core's available balance at go-live:
+      <b class="${rf.differ ? 'warn-t' : 'ok-t'}">${siFmt(rf.same)} of ${siFmt(rf.accounts)} the same</b>${rf.differ ? ` · ${siFmt(rf.differ)} change when the file is refreshed` : ''}</p>`
+      + '<div class="table-wrap"><table class="tbl"><thead><tr><th>Account</th><th class="num">Switch</th><th class="num">New Flexcube Core</th><th class="num">Difference</th><th>Result</th></tr></thead><tbody>'
+      + (rf.rows || []).map(r => `<tr><td class="mono">${escapeHtml(r.account)}</td><td class="num">${siAmt(r.switch)}</td><td class="num">${siAmt(r.core)}</td><td class="num">${siAmt(r.diff)}</td>
+        <td class="si-wrap"><span class="pill ${r.same ? 'ok' : 'warn'}">${r.same ? 'SAME' : 'DIFFERS'}</span> <span class="muted">${escapeHtml(r.note || '')}</span></td></tr>`).join('')
+      + `</tbody></table></div>${rf.rowsTotal > (rf.rows || []).length ? `<p class="summary-hint">Showing ${(rf.rows || []).length} of ${siFmt(rf.rowsTotal)}, differences first; the report has more</p>` : ''}`;
+  }
+  $('siOnlineBox').innerHTML = ob;
+
+  // Step 9: clearing
+  let cb9 = '';
+  if (cl) {
+    const file = cl.how === 'file';
+    cb9 = `<h3 class="si-sub">Clearing after go-live</h3><div class="si-tiles">` + siTile('Open authorizations', siFmt(cl.open)) + siTile('Cleared', siFmt(cl.total))
+      + siTile('At a different amount', siFmt(cl.different)) + siTile('Authorized', siAmt(cl.authTotal)) + siTile('Cleared for', siAmt(cl.clearTotal))
+      + (file ? siTile('Clearing file', cl.loadedAt ? 'Loaded' : 'Not loaded yet', cl.loadedAt ? 'ok' : 'warn') : siTile('0220s sent', `${siFmt(cl.sent)}/${siFmt(cl.total)}`) + siTile('Acknowledged', siFmt(cl.acknowledged), 'ok'))
+      + '</div><div class="table-wrap"><table class="tbl"><thead><tr><th>RRN</th><th>Authorization</th><th>Account</th><th class="num">Authorized</th><th class="num">Cleared</th><th>Reply</th><th>Money</th></tr></thead><tbody>'
+      + (cl.items || []).map(it => {
+        const v = (run.money || {})[it.rrn];
+        const reply = it.status === 'PENDING' ? '<span class="muted">queued</span>' : it.status === 'FILE' ? '<span class="muted">in the list</span>' : it.status === 'LOADED' ? '<span class="muted">loaded</span>'
+          : `<span class="pill ${it.status === 'ACK' ? 'ok' : 'bad'} code" title="${escapeHtml(it.error || CODE_DESC[it.actual] || '')}">${escapeHtml(it.actual || it.status)}</span>`;
+        return `<tr><td class="mono">${escapeHtml(it.rrn)}</td><td>${escapeHtml(it.label.replace(/^Clearing: /, ''))}</td><td class="mono">${escapeHtml(it.account || '')}</td>
+          <td class="num">${escapeHtml(it.authAmount)}</td><td class="num${Number(it.difference) ? ' warn-t' : ''}">${escapeHtml(it.amount)}</td><td>${reply}</td>
+          <td class="money">${v ? moneyPill(v, it.rrn) : '<span class="muted">·</span>'}</td></tr>`;
+      }).join('')
+      + `</tbody></table></div>${cl.itemsTotal > (cl.items || []).length ? `<p class="summary-hint">Showing ${(cl.items || []).length} of ${siFmt(cl.itemsTotal)}, problems first; the CSV has all of them</p>` : ''}`;
+  }
+  $('siClearBox').innerHTML = cb9;
 
   // Every advice
   const money = run.money || {};
@@ -1774,7 +1858,7 @@ async function siLoadHistory() {
     const { runs } = await uatApi('/api/standin/runs');
     $('siHistory').innerHTML = runs.length ? runs.map(r => {
       const s = r.summary || {}, ms = r.moneySummary, t = r.timing || {};
-      const reached = r.kind === 'rehearsal' ? (r.status === 'DONE' ? 'Fully online' : `Step ${r.step || 0} of 8`) : 'Replay';
+      const reached = r.kind === 'rehearsal' ? (r.status === 'DONE' ? (r.step >= 9 ? 'Cleared' : 'Fully online') : `Step ${r.step || 0} of ${r.lastStep || 8}`) : 'Replay';
       const result = r.status === 'RUNNING' ? '<span class="pill warn">sending</span>'
         : ms ? `<span class="pill ${ms.fail ? 'bad' : ms.wait ? 'warn' : 'ok'}">${siFmt(ms.pass)}/${siFmt(ms.transactions)} reconciled</span>`
         : `<span class="muted">${escapeHtml(r.status)}</span>`;
@@ -1818,6 +1902,13 @@ $('siRelease').addEventListener('click', () => {
   siStep('siRelease', 'release', siReleaseBody(), `Release ${left.toLocaleString()} advices to ${siLast ? siLast.target : 'the New Flexcube Core'}? They are real messages: the core will post them.`);
 });
 $('siOnline').addEventListener('click', () => siStep('siOnline', 'online', { inquiries: siNum('siOnlineInq') }));
+$('siClear').addEventListener('click', () => {
+  const b = siClearBody(), open = (siLast && siLast.clearable) || 0, n = Math.round(open * b.clearedPct / 100);
+  siStep('siClear', 'clearing', b, b.how === 'file' ? null
+    : `Send ${n.toLocaleString()} clearing advice${n === 1 ? '' : 's'} (0220) to ${siLast ? siLast.target : 'the New Flexcube Core'}? They are real messages: the core will post them.`);
+});
+$('siFinish').addEventListener('click', () => siStep('siFinish', 'finish', {}, 'Finish the rehearsal without clearing? The open authorizations stay open.'));
+$('siCleared').addEventListener('click', () => siStep('siCleared', 'cleared', {}, 'Has the bank loaded the clearing list into the New Flexcube Core? SwitchProof then reconciles every account.'));
 $('siStop').addEventListener('click', async () => { try { await uatApi('/api/standin/runs', { id: siRunId, action: 'stop' }); } catch (e) { toast(e.message, 'bad'); } });
 $('siRecheck').addEventListener('click', async () => {
   try { await uatApi('/api/standin/runs', { id: siRunId, action: 'recheck' }); siPoll(); } catch (e) { toast(e.message, 'bad'); }
@@ -1835,8 +1926,9 @@ $('siHistory').addEventListener('click', async (e) => {
     siLoadHistory();
   } catch (err) { toast(err.message, 'bad'); }
 });
-document.querySelector('.si-setup').addEventListener('input', () => { siPlanLine(); siReleasePlanLine(); siRemember(); });
+document.querySelector('.si-setup').addEventListener('input', () => { siPlanLine(); siReleasePlanLine(); siClearPlanLine(); siRemember(); });
 siRestore();
+siAuthFields();
 
 // ---------- UAT: case library ----------
 const ACTION_NAMES = {

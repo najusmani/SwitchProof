@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261003003626">
+<link rel="stylesheet" href="style.css?v=20261012215121">
 </head>
 <body>
 
@@ -423,7 +423,7 @@
         <div class="si-step-body">
           <p class="si-note">No core is connected: the switch approves or declines each one on its limits and the balance file, and queues what it approved.</p>
           <div class="field-row two">
-            <label class="field"><span>ATM withdrawals <em>0220</em></span><input type="number" id="siCntWITHDRAWAL" min="0" max="20000" value="40"></label>
+            <label class="field"><span>ATM withdrawals <em id="siAtmMti">0220</em></span><input type="number" id="siCntWITHDRAWAL" min="0" max="20000" value="40"></label>
             <label class="field"><span>POS purchases <em>0220</em></span><input type="number" id="siCntPURCHASE" min="0" max="20000" value="30"></label>
             <label class="field"><span>POS pre-authorizations <em>0120</em></span><input type="number" id="siCntPREAUTH" min="0" max="20000" value="10"></label>
             <label class="field"><span>Transfers <em>0220</em></span><input type="number" id="siCntTRANSFER" min="0" max="20000" value="0"></label>
@@ -439,7 +439,20 @@
             <label class="field"><span>F7 transmission time</span><select id="siF7" title="F7 transmission date and time: when the advice is sent (as ISO defines it), or when the transaction happened"><option value="replay">Replay time</option><option value="original">Original time</option></select></label>
           </div>
           <label class="field"><span>Accounts <em>the balance file's, plus these (no balance record); @ROLE ok</em></span><textarea id="siAccounts" rows="2" class="mono" placeholder="optional"></textarea></label>
+          <p class="si-h">Authorizations</p>
+          <div class="field-row two">
+            <label class="field" title="Dual message: the ATM's 0100 is approved at the switch and reaches the core as a 0120 authorization advice, cleared later. Single message: a 0200, replayed as a 0220 that posts at once."><span>ATM withdrawals at the switch</span>
+              <select id="siAtm"><option value="single">0200, replayed as 0220</option><option value="dual">0100, replayed as 0120</option></select></label>
+            <label class="field" title="What the New Flexcube Core does with a 0120: place a hold (clearing then debits the final amount and releases it), or post a debit (clearing then posts only the difference)"><span>The New Flexcube Core books a 0120 as</span>
+              <select id="siBooking"><option value="hold">A hold</option><option value="debit">A debit</option></select></label>
+          </div>
+          <p class="si-note" id="siBookingNote">A hold: clearing debits the final amount and releases the hold.</p>
           <p class="si-h">From before the cut-off, and force posting</p>
+          <div class="field-row two">
+            <label class="field" title="POS authorizations the Legacy Core approved in the two days before the cut-off. The migration brings the balances without their holds, so the switch replays them to the New Flexcube Core as 0120s, first in the queue."><span>POS authorizations by the Legacy Core <em>replayed as 0120</em></span><input type="number" id="siLegacyPos" min="0" max="5000" value="0"></label>
+            <label class="field" title="ATM withdrawals (0100) the Legacy Core approved before the cut-off, replayed as 0120s. Only when ATM withdrawals are authorizations: as 0200s the Legacy Core already posted them."><span>ATM withdrawals by the Legacy Core <em>0100, replayed as 0120</em></span><input type="number" id="siLegacyAtm" min="0" max="5000" value="0"></label>
+          </div>
+          <p class="si-note" id="siLegacyNote" hidden>They come off the balance file first, as the switch saw them: load the file with the balances before them (the migrated balances, without holds).</p>
           <div class="field-row three">
             <label class="field" title="ATM withdrawals the Legacy Core approved just before the cut-off, reversed just after it: the New Flexcube Core never saw the original"><span>Reversals of Legacy Core withdrawals</span><input type="number" id="siLegacyRev" min="0" max="5000" value="0"></label>
             <label class="field" title="One withdrawal the switch approves above the account's balance (a stale balance record): the advice must still post, into overdraft"><span>Force post <em>account</em></span><input type="text" id="siForceAcct" class="mono" placeholder="optional"></label>
@@ -490,9 +503,36 @@
       <li class="si-step" data-step="8">
         <div class="si-step-head"><span class="si-num">8</span><b>Fully online</b><span class="si-done" data-done></span></div>
         <div class="si-step-body">
-          <p class="si-note">The switch leaves stand-in and live transactions go to the New Flexcube Core. Balance inquiries check what customers now see.</p>
+          <p class="si-note">The switch leaves stand-in and live transactions go to the New Flexcube Core. Balance inquiries check what customers now see,
+            and the switch's balance file is compared with the New Flexcube Core before it's refreshed.</p>
           <label class="field"><span>Balance inquiries</span><input type="number" id="siOnlineInq" min="0" max="20" value="5"></label>
           <div class="si-actions"><button type="button" class="btn primary" id="siOnline">Go fully online</button></div>
+        </div>
+      </li>
+      <li class="si-step" data-step="9">
+        <div class="si-step-head"><span class="si-num">9</span><b>Clearing</b><span class="si-done" data-done></span></div>
+        <div class="si-step-body">
+          <p class="si-note">After go-live the authorizations still open are cleared: POS for the authorized amount or a different one (tips, partial shipments), cash as dispensed.</p>
+          <div id="siClearForm">
+            <div class="field-row two">
+              <label class="field"><span>Clearing reaches the New Flexcube Core as</span><select id="siClearHow"><option value="advice">0220 advices from the switch</option><option value="file">A clearing file the bank loads</option></select></label>
+              <label class="field"><span>Cleared <em>% of the open authorizations</em></span><input type="number" id="siClearPct" min="0" max="100" value="100"></label>
+              <label class="field"><span>At a different amount <em>% of POS</em></span><input type="number" id="siClearDiffPct" min="0" max="100" value="20"></label>
+              <label class="field"><span>Differs by up to <em>%</em></span><input type="number" id="siClearDiffBy" min="1" max="100" value="50"></label>
+            </div>
+            <p class="si-plan" id="siClearPlan"></p>
+            <div class="si-actions">
+              <button type="button" class="btn sm ghost-plain" id="siFinish">Finish without clearing</button>
+              <button type="button" class="btn primary" id="siClear">Clear</button>
+            </div>
+          </div>
+          <div id="siClearFile" hidden>
+            <p class="si-note">Load the clearing list into the New Flexcube Core the way the bank loads its clearing, then check: SwitchProof reconciles every account against it.</p>
+            <div class="si-actions">
+              <a class="btn sm" id="siClearList">Clearing list (CSV)</a>
+              <button type="button" class="btn primary" id="siCleared">Clearing loaded: check</button>
+            </div>
+          </div>
         </div>
       </li>
     </ol>
@@ -519,6 +559,7 @@
     <div id="siAccountsBox"></div>
     <div id="siGlBox"></div>
     <div id="siOnlineBox"></div>
+    <div id="siClearBox"></div>
     <div class="si-filter" id="siFilterRow" hidden>
       <label class="chk"><input type="checkbox" id="siProblems"> <span>Problems only</span></label>
       <span class="summary-hint" id="siShown"></span>
@@ -1275,8 +1316,24 @@
     <button type="button" class="t-btn" id="relClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
   <p class="rel-lead">What changed in each version of SwitchProof. The website always runs the latest release; SwitchProof on your PC asks to update when it's older than the website needs.</p>
-  <nav class="rel-index" id="relIndex" aria-label="Versions"><button type="button" data-rel="1.4.5">1.4.5</button><button type="button" data-rel="1.4.4">1.4.4</button><button type="button" data-rel="1.4.3">1.4.3</button><button type="button" data-rel="1.4.2">1.4.2</button><button type="button" data-rel="1.4.1">1.4.1</button><button type="button" data-rel="1.4.0">1.4.0</button><button type="button" data-rel="1.3.0">1.3.0</button><button type="button" data-rel="early">Before 1.3.0</button></nav>
+  <nav class="rel-index" id="relIndex" aria-label="Versions"><button type="button" data-rel="1.4.6">1.4.6</button><button type="button" data-rel="1.4.5">1.4.5</button><button type="button" data-rel="1.4.4">1.4.4</button><button type="button" data-rel="1.4.3">1.4.3</button><button type="button" data-rel="1.4.2">1.4.2</button><button type="button" data-rel="1.4.1">1.4.1</button><button type="button" data-rel="1.4.0">1.4.0</button><button type="button" data-rel="1.3.0">1.3.0</button><button type="button" data-rel="early">Before 1.3.0</button></nav>
   <div class="rel-body" id="relBody">
+    <section class="rel" id="rel-1.4.6">
+        <div class="rel-head"><h3>1.4.6</h3><span class="rel-date">12 October 2026</span><span class="rel-tag">Authorizations and clearing in stand-in</span></div>
+        <h4>Stand-in simulation <span class="rel-plan">Enterprise</span></h4>
+        <ul>
+          <li>Authorizations the Legacy Core approved before the cut-off: when the migration brings balances without their holds, the switch replays them to the New Flexcube Core as 0120s, first in the queue and in time order.</li>
+          <li>ATM withdrawals can run as authorizations: 0100 at the switch, replayed as 0120.</li>
+          <li>Choose how the New Flexcube Core books a 0120: as a hold, or as a debit. The reconciliation checks each authorization the way you chose.</li>
+          <li>New step 9, Clearing: after go-live the open authorizations clear, POS for the authorized amount or a different one, cash as dispensed. Clearing goes as 0220 advices from the switch, or as a list the bank loads; every account is then reconciled.</li>
+          <li>With debit booking the check expects clearing to post only the difference: nothing at the same amount, a further debit when it's more, a credit when it's less. Debiting the full amount again is flagged.</li>
+          <li>Going fully online now compares the switch's balance file with the New Flexcube Core before it's refreshed, account by account.</li>
+        </ul>
+        <h4>Also</h4>
+        <ul>
+          <li>When a switch closes every connection without a reply, the load test says it isn't a concurrency problem and points at the network path, such as a load balancer that isn't passing plain TCP or an address that isn't allowed.</li>
+        </ul>
+      </section>
     <section class="rel" id="rel-1.4.5">
         <div class="rel-head"><h3>1.4.5</h3><span class="rel-date">1 October 2026</span><span class="rel-tag">Your own types, sources and currencies</span></div>
         <h4>Your own transaction types <span class="rel-plan">Team</span></h4>
@@ -1373,8 +1430,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20261003003626"></script>
-<script src="agent.js?v=20261003003626"></script>
-<script src="app.js?v=20261003003626"></script>
+<script src="config.js?v=20261012215121"></script>
+<script src="agent.js?v=20261012215121"></script>
+<script src="app.js?v=20261012215121"></script>
 </body>
 </html>
