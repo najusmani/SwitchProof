@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261012215121">
+<link rel="stylesheet" href="style.css?v=20261108104828">
 </head>
 <body>
 
@@ -24,6 +24,7 @@
     <button type="button" role="tab" class="view-tab" data-view="load" aria-selected="true">Load test</button>
     <button type="button" role="tab" class="view-tab" data-view="uat" aria-selected="false">UAT</button>
     <button type="button" role="tab" class="view-tab" data-view="standin" aria-selected="false" title="Rehearse a core banking cutover: stand-in, release the queue, reconcile (Enterprise)">Stand-in</button>
+    <button type="button" role="tab" class="view-tab" data-view="setup" aria-selected="false" title="How the FLEXCUBE switch interface is set up for each processing code, and change packs (Enterprise)">Switch setup</button>
   </nav>
 
   <div class="target-wrap">
@@ -583,6 +584,165 @@
 </main>
 </div>
 
+<div id="viewSetup" hidden>
+<main class="st-layout">
+  <section class="card st-flow">
+    <div class="card-head">
+      <h2>Customize a transaction</h2>
+      <span class="summary-hint" id="stTargetLine">—</span>
+      <div class="head-actions">
+        <span class="summary-hint" id="stReadAt"></span>
+        <button type="button" class="btn sm ghost-plain" id="stSourcesBtn" title="Where the rules and tables were read from">Sources</button>
+        <button type="button" class="btn sm primary-sm" id="stRead">Read setup</button>
+      </div>
+    </div>
+    <p class="plan-hint" id="stLock" hidden>Switch customization is part of the Enterprise plan.</p>
+    <div class="empty-note st-nodb" id="stNoDb" hidden><span>No bank database is set up for this target.</span>
+      <button type="button" class="btn sm ghost-plain" id="stDbOpen">Set up the bank database</button>
+      <button type="button" class="btn sm ghost-plain" id="stUpOpen">Upload the setup instead</button></div>
+    <p class="empty-note" id="stNoReading" hidden>Press Read setup: SwitchProof reads this switch's setup (read-only).</p>
+
+    <ol class="si-steps st-steps" id="stSteps" hidden>
+      <li class="si-step" data-step="1">
+        <div class="si-step-head"><span class="si-num">1</span><b>Transaction</b><span class="si-done" data-done></span></div>
+        <div class="si-step-body">
+          <div class="table-wrap"><table class="tbl st-codes">
+            <thead><tr><th>Code</th><th>Transaction</th><th>Literal</th><th>Product</th><th class="num">Last <span id="stDaysLabel">7</span> days</th><th>Status</th></tr></thead>
+            <tbody id="stCodes"></tbody>
+          </table></div>
+          <div class="st-new">
+            <label class="field"><span>Or a new code</span><input type="text" id="stNewCode" class="mono" maxlength="2" inputmode="numeric" list="stFreeCodes" placeholder="91"><datalist id="stFreeCodes"></datalist></label>
+            <label class="field"><span>Name</span><input type="text" id="stNewName" maxlength="35" placeholder="CARDLESS WITHDRAWAL"></label>
+            <button type="button" class="btn sm" id="stNewGo">Use this code</button>
+          </div>
+          <p class="st-err" id="stNewErr" role="alert"></p>
+        </div>
+      </li>
+
+      <li class="si-step" data-step="2">
+        <div class="si-step-head"><span class="si-num">2</span><b>Life cycle</b><span class="si-done" data-done></span></div>
+        <div class="si-step-body">
+          <div class="field-row three st-head">
+            <label class="field"><span>Product</span><select id="lcProduct"></select></label>
+            <div class="field"><span>Applies to</span><div class="st-cats">
+              <label class="chk"><input type="checkbox" id="lcCatO"> <span>On-us</span></label>
+              <label class="chk"><input type="checkbox" id="lcCatR"> <span>Remote on-us</span></label>
+              <label class="chk"><input type="checkbox" id="lcCatF"> <span>Off-us</span></label></div></div>
+            <label class="field"><span>Other side of the entry</span><select id="lcSide">
+              <option value="arc">ARC offset</option><option value="merchant">Merchant account (on-us)</option><option value="cashgl">Terminal Cash GL</option></select></label>
+          </div>
+          <div class="field-row three" id="lcNewProductRow" hidden>
+            <label class="field"><span>New product code</span><input type="text" id="lcNewProduct" class="mono" maxlength="4" placeholder="CLWP"></label>
+            <label class="field"><span>Copied from</span><select id="lcCopyFrom"></select></label>
+          </div>
+          <div class="field-row three" id="lcSideRow" hidden>
+            <label class="field" id="lcOffsetField"><span>New ARC offset <em>optional</em></span><input type="text" id="lcOffset" class="mono"></label>
+            <label class="field" id="lcMerchField"><span>Merchant column with the account</span><select id="lcMerchCol"></select></label>
+            <label class="field" id="lcCashGlField"><span>Cash GL</span><input type="text" id="lcCashGl" class="mono"></label>
+            <label class="field" id="lcTermField"><span>Terminals</span><input type="text" id="lcTerminals" class="mono" placeholder="T0000001, T0000002"></label>
+          </div>
+
+          <div class="table-wrap"><table class="tbl st-life">
+            <thead><tr><th>Stage</th><th>Today</th><th>Wanted</th><th>How</th></tr></thead>
+            <tbody id="lcStages"></tbody>
+          </table></div>
+
+          <p class="si-h">Charges <span class="summary-hint" id="lcChargesOf"></span></p>
+          <div class="table-wrap"><table class="tbl st-charges">
+            <thead><tr><th>Charge</th><th>Amount</th><th>Rate %</th><th>GL</th><th>When funds are short</th></tr></thead>
+            <tbody id="lcCharges"></tbody>
+          </table></div>
+
+          <div class="st-panels">
+            <div><p class="si-h">Decline fee <span class="summary-hint" id="lcFeeWhere"></span></p>
+              <div id="lcFee"></div></div>
+            <div><p class="si-h">Balance</p>
+              <dl class="st-kv" id="lcBalance"></dl></div>
+          </div>
+
+          <div class="st-rules">
+            <div class="st-rules-head"><p class="si-h">Rules <span class="summary-hint">your business rules, added to your switch hooks</span></p>
+              <button type="button" class="btn sm" id="ruAdd">Add a rule</button></div>
+            <div class="table-wrap" id="ruListWrap" hidden><table class="tbl st-rule-list">
+              <thead><tr><th>#</th><th>When</th><th>If</th><th>Then</th><th></th></tr></thead>
+              <tbody id="ruList"></tbody>
+            </table></div>
+            <p class="si-note" id="ruNone"></p>
+            <div class="st-rule-form" id="ruForm" hidden>
+              <div class="field-row three">
+                <label class="field"><span>When</span><select id="ruHook"></select></label>
+                <label class="field"><span>For</span><select id="ruScope"></select></label>
+                <label class="field"><span>Then</span><select id="ruAction"></select></label>
+              </div>
+              <div class="field"><span>If</span>
+                <div id="ruConds"></div>
+                <button type="button" class="btn sm ghost-plain" id="ruCondAdd">+ Condition</button></div>
+              <div id="ruParams"></div>
+              <p class="st-err" id="ruErr" role="alert"></p>
+              <div class="si-actions"><button type="button" class="btn sm ghost-plain" id="ruCancel">Cancel</button><button type="button" class="btn sm primary" id="ruSave">Add rule</button></div>
+            </div>
+          </div>
+          <p class="st-err" id="lcErr" role="alert"></p>
+          <div class="si-actions"><button type="button" class="btn primary" id="lcNext">Review</button></div>
+        </div>
+      </li>
+
+      <li class="si-step" data-step="3">
+        <div class="si-step-head"><span class="si-num">3</span><b>Review</b><span class="si-done" data-done></span></div>
+        <div class="si-step-body">
+          <div id="rvBody"></div>
+          <p class="st-err" id="rvErr" role="alert"></p>
+          <div class="si-actions"><button type="button" class="btn sm ghost-plain" id="rvBack">Back</button><button type="button" class="btn primary" id="rvBuild">Build the pack</button></div>
+        </div>
+      </li>
+
+      <li class="si-step" data-step="4">
+        <div class="si-step-head"><span class="si-num">4</span><b>Deploy</b><span class="si-done" data-done></span></div>
+        <div class="si-step-body">
+          <div id="dpBody"></div>
+          <div class="si-actions"><button type="button" class="btn sm ghost-plain" id="dpNew">Customize another</button><button type="button" class="btn sm" id="dpRecheck">Re-check setup</button></div>
+        </div>
+      </li>
+    </ol>
+  </section>
+</main>
+</div>
+
+<dialog class="fb-dlg st-src-dlg" id="stUpDlg" aria-labelledby="stUpTitle">
+  <div class="dlg-head">
+    <div><p class="fb-eyebrow">Switch setup, without a database connection</p><h2 id="stUpTitle">Upload the setup</h2></div>
+    <button type="button" class="t-btn" id="stUpClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <p class="si-note">Run each SELECT in your SQL tool, save the result as CSV with headers, and upload it. The files stay on this PC.</p>
+  <label class="field st-schema"><span>Schema <em>blank if your user has synonyms</em></span><input type="text" id="stUpSchema" class="mono" placeholder="FCUBS"></label>
+  <div class="table-wrap"><table class="tbl st-up">
+    <thead><tr><th>Export</th><th>Uploaded</th><th></th></tr></thead>
+    <tbody id="stUpRows"></tbody>
+  </table></div>
+  <p class="si-h">Package files</p>
+  <div class="table-wrap"><table class="tbl st-up">
+    <tbody id="stUpPkgs"></tbody>
+  </table></div>
+  <input type="file" id="stUpFile" accept=".csv,.txt" hidden>
+  <div class="dlg-foot"><span class="summary-hint" id="stUpState"></span><button type="button" class="btn primary" id="stUpRead">Read setup</button></div>
+</dialog>
+
+<dialog class="fb-dlg st-src-dlg" id="stSrcDlg" aria-labelledby="stSrcTitle">
+  <div class="dlg-head">
+    <div><p class="fb-eyebrow">Switch setup</p><h2 id="stSrcTitle">Sources</h2></div>
+    <button type="button" class="t-btn" id="stSrcClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="table-wrap"><table class="tbl">
+    <thead><tr><th>Package</th><th>Read from</th><th class="num">Lines</th><th></th></tr></thead>
+    <tbody id="stSources"></tbody>
+  </table></div>
+  <input type="file" id="stSourceFile" accept=".txt,.sql,.pkb,.pls,.plb" hidden>
+  <p class="si-h">Tables</p>
+  <div id="stTables" class="st-tables summary-hint">—</div>
+  <label class="field st-days-field"><span>Traffic read from the last</span>
+    <select id="stDays"><option value="1">1 day</option><option value="7" selected>7 days</option><option value="30">30 days</option></select></label>
+</dialog>
+
 <div id="viewUat" hidden>
 <main class="uat-layout">
 
@@ -863,7 +1023,7 @@
       <label class="field"><span>Service name</span><input type="text" id="dbService" class="mono" placeholder="FCUBSUAT" required></label>
     </div>
     <div class="field-row three">
-      <label class="field"><span>Schema <em>table owner</em></span><input type="text" id="dbSchema" class="mono" placeholder="FCUBS"></label>
+      <label class="field" title="The schema that owns the FLEXCUBE tables and packages. Leave it blank when the read-only user has synonyms for them: SwitchProof then finds the owner through the synonyms."><span>Schema <em>owner; blank if the user has synonyms</em></span><input type="text" id="dbSchema" class="mono" placeholder="FCUBS"></label>
       <label class="field"><span>User</span><input type="text" id="dbUser" class="mono" required autocomplete="off"></label>
       <label class="field"><span>Password</span><input type="password" id="dbPass" autocomplete="new-password"></label>
     </div>
@@ -1319,8 +1479,24 @@
     <button type="button" class="t-btn" id="relClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
   <p class="rel-lead">What changed in each version of SwitchProof. The website always runs the latest release; SwitchProof on your PC asks to update when it's older than the website needs.</p>
-  <nav class="rel-index" id="relIndex" aria-label="Versions"><button type="button" data-rel="1.4.6">1.4.6</button><button type="button" data-rel="1.4.5">1.4.5</button><button type="button" data-rel="1.4.4">1.4.4</button><button type="button" data-rel="1.4.3">1.4.3</button><button type="button" data-rel="1.4.2">1.4.2</button><button type="button" data-rel="1.4.1">1.4.1</button><button type="button" data-rel="1.4.0">1.4.0</button><button type="button" data-rel="1.3.0">1.3.0</button><button type="button" data-rel="early">Before 1.3.0</button></nav>
+  <nav class="rel-index" id="relIndex" aria-label="Versions"><button type="button" data-rel="1.4.7">1.4.7</button><button type="button" data-rel="1.4.6">1.4.6</button><button type="button" data-rel="1.4.5">1.4.5</button><button type="button" data-rel="1.4.4">1.4.4</button><button type="button" data-rel="1.4.3">1.4.3</button><button type="button" data-rel="1.4.2">1.4.2</button><button type="button" data-rel="1.4.1">1.4.1</button><button type="button" data-rel="1.4.0">1.4.0</button><button type="button" data-rel="1.3.0">1.3.0</button><button type="button" data-rel="early">Before 1.3.0</button></nav>
   <div class="rel-body" id="relBody">
+    <section class="rel" id="rel-1.4.7">
+        <div class="rel-head"><h3>1.4.7</h3><span class="rel-date">8 November 2026</span><span class="rel-tag">Switch setup: customize your switch</span></div>
+        <h4>Switch setup <span class="rel-plan">Enterprise</span></h4>
+        <ul>
+          <li>New Switch setup tab: SwitchProof reads how your FLEXCUBE switch interface handles each processing code (literal, product, accounting, holds and charges) from your bank's own database, read-only.</li>
+          <li>Customize a transaction in four steps: pick the code, choose what happens at each stage of its life cycle (authorization, advices, completion, reversals, repeats, failed postings, hold expiry), review, then download a change pack.</li>
+          <li>Product charges, your decline fee and the hold expiry can be changed in the same flow.</li>
+          <li>Business rules: at a point in the transaction, if your conditions match (amount, channel, card range, terminal, time of day and more), decline, limit per day, hold, post, add a fee, set the other account, or run your own PL/SQL. Only the points your switch actually calls are offered.</li>
+          <li>A change pack is a set of scripts for your DBA: backups first, the change, checks afterwards, and a rollback. SwitchProof never runs them. Your packages change only where the rules go; everything else stays as it is.</li>
+          <li>Works with any schema name, or with the read-only user's synonyms. A bank that doesn't connect SwitchProof to its database can upload table exports and package files instead.</li>
+        </ul>
+        <h4>Also</h4>
+        <ul>
+          <li>SwitchProof now has its own icon in the browser tab.</li>
+        </ul>
+      </section>
     <section class="rel" id="rel-1.4.6">
         <div class="rel-head"><h3>1.4.6</h3><span class="rel-date">12 October 2026</span><span class="rel-tag">Authorizations and clearing in stand-in</span></div>
         <h4>Stand-in simulation <span class="rel-plan">Enterprise</span></h4>
@@ -1433,8 +1609,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20261012215121"></script>
-<script src="agent.js?v=20261012215121"></script>
-<script src="app.js?v=20261012215121"></script>
+<script src="config.js?v=20261108104828"></script>
+<script src="agent.js?v=20261108104828"></script>
+<script src="app.js?v=20261108104828"></script>
 </body>
 </html>

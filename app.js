@@ -1422,9 +1422,11 @@ function showView(v) {
   $('viewLoad').hidden = v !== 'load';
   $('viewUat').hidden = v !== 'uat';
   $('viewStandin').hidden = v !== 'standin';
+  $('viewSetup').hidden = v !== 'setup';
   store.set('view', v);
   if (v === 'uat') { loadCases(); loadRunHistory(); }
   else if (v === 'standin') { siTargetLine(); siPlanLine(); siLoadHistory(); siPoll(); }
+  else if (v === 'setup') stLoad();
   else drawChart();
 }
 document.querySelector('.views').addEventListener('click', (e) => { const b = e.target.closest('.view-tab'); if (b) showView(b.dataset.view); });
@@ -2020,6 +2022,7 @@ $('caseDeleteBtn').addEventListener('click', async () => {
 
 function renderUatTarget() {
   if ($('siTargetLine') && !$('viewStandin').hidden) siTargetLine();
+  if ($('stTargetLine') && !$('viewSetup').hidden) stOnTarget();
   if (!$('uatTargetLine')) return;
   const t = activeTarget();
   $('uatTargetLine').textContent = t ? `→ ${targetLabel(t)}` : '—';
@@ -2968,6 +2971,625 @@ document.addEventListener('click', (e) => {
   if (b && b.dataset.rrn) openTrail(b.dataset.rrn, b.dataset.target || undefined);
 });
 
+// ---------- Switch setup (Enterprise): customize a transaction, step by step ----------
+// 1 Transaction  2 Life cycle  3 Review  4 Deploy. The agent reads the setup (read-only), plans the change and
+// builds the pack; SwitchProof never runs it.
+let stData = null, stFor = null, stStep = 1, stSel = null, lc = null, rvPlan = null, dpPack = null;
+const dpChecked = new Set(), dpOpenFiles = new Set();
+const ST_FROM = { database: ['Database', 'ok'], file: ['Uploaded', 'neutral'], missing: ['Not readable', 'bad'] };
+const LC_HOW = { hook: 'Hook', route: 'Table change', setting: 'Setting · whole channel', fee: 'Your code', core: 'Core', look: 'Needs a look' };
+const LC_HOOK_STAGES = ['auth', 'authAdvice', 'financial', 'postFail'];
+
+function stTargetLine() { const t = activeTarget(); $('stTargetLine').textContent = t ? targetLabel(t) : '—'; }
+
+/** The last reading for the active target (no database access). */
+async function stLoad() {
+  stTargetLine();
+  const t = activeTarget();
+  stFor = t ? t.id : null;
+  $('stLock').hidden = can('setup');
+  $('stRead').disabled = !can('setup') || !t;
+  if (!t || !can('setup')) { stData = null; stRender(); return; }
+  if (!(t.id in bankDb)) await loadBankDb(t.id);
+  try { const d = await targetsApi('/api/setup?target=' + encodeURIComponent(t.id)); stData = d.none ? null : d; } catch (e) { stData = null; }
+  stRender();
+}
+
+function stOnTarget() { const t = activeTarget(); if (!$('viewSetup').hidden && (t ? t.id : null) !== stFor) { stReset(); stLoad(); } }
+function stReset() { stStep = 1; stSel = null; lc = null; rvPlan = null; dpPack = null; dpChecked.clear(); dpOpenFiles.clear(); }
+
+async function stRead() {
+  const t = activeTarget();
+  if (!t) return;
+  const b = $('stRead');
+  b.disabled = true; b.textContent = 'Reading…';
+  try {
+    stData = await targetsApi('/api/setup', { target: t.id, days: Number($('stDays').value) || 7 });
+    if (stSel && !stSel.isNew && !stCodeRow()) stReset();
+    stRender();
+    toast('Setup read', 'ok');
+  } catch (e) { toast(e.message, 'bad'); }
+  finally { b.disabled = false; b.textContent = 'Read setup'; }
+}
+
+const stCode = (s) => `<span class="mono">${escapeHtml(s == null || s === '' ? '–' : s)}</span>`;
+const stPill = (cls, text) => `<span class="pill ${cls}">${escapeHtml(text)}</span>`;
+function stCodeRow(code) { return ((stData || {}).codes || []).find(c => c.code === (code || (stSel && stSel.code))) || null; }
+function stOnUsProduct(row) { return ((row && row.products) || {}).O ? row.products.O[0] : (((row && row.productInfo) || [])[0] || {}).product || ''; }
+
+/** One word (or two) for a code's state. */
+function stStatus(row) {
+  const k = (row.route || {}).kind;
+  if (k === 'inquiry') return ['Inquiry', 'neutral'];
+  if (k === 'none') return ['Moves no money', 'bad'];
+  if (k === 'pending') return ['Never posts', 'bad'];
+  if (k === 'unknown') {
+    if ((row.route || {}).isoInquiry) return ['Inquiry', 'neutral'];
+    const fin = (row.lifecycle || []).find(s => s.id === 'financial') || {};
+    if (fin.source === 'traffic' && String(fin.today).startsWith('Parked')) return ['Never posts', 'bad'];
+    if (row.status === 'bad') return ['Moves no money', 'bad'];
+    return (row.lifecycle || []).some(s => s.source === 'traffic') ? ['From traffic', 'neutral'] : ['Unknown', 'neutral'];
+  }
+  if (row.status === 'bad') return ['Problem', 'bad'];
+  if (row.status === 'warn') return ['Check', 'warn'];
+  return [(row.route || {}).custom ? 'Works · custom' : 'Works', 'ok'];
+}
+
+function stRender() {
+  const d = stData, t = activeTarget(), locked = !can('setup');
+  const noDb = !!(t && !locked && bankDb[t.id] && !bankDb[t.id].configured);
+  $('stNoDb').hidden = !noDb;
+  $('stNoDb').querySelector('span').textContent = d && d.mode === 'upload' ? 'Read from uploaded files (no database connection).' : 'No bank database is set up for this target.';
+  $('stUpOpen').textContent = d && d.mode === 'upload' ? 'Update the uploads' : 'Upload the setup instead';
+  $('stNoReading').hidden = locked || noDb || !!d;
+  $('stSteps').hidden = locked || !d;
+  $('stReadAt').textContent = d ? 'read ' + new Date(d.readAt).toLocaleString() : '';
+  if (!d) return;
+  $('stDaysLabel').textContent = (d.traffic || {}).days || 7;
+  const sel = stSel ? `${stSel.code} · ${stSel.isNew ? stSel.name || 'new code' : (stCodeRow() || {}).description || ''}` : '';
+  const done = { 1: sel, 2: rvPlan ? `${rvPlan.steps.length} change${rvPlan.steps.length === 1 ? '' : 's'}` : '', 3: dpPack ? 'pack ' + dpPack.id : '', 4: '' };
+  document.querySelectorAll('#stSteps .si-step').forEach(li => {
+    const n = Number(li.dataset.step);
+    li.classList.toggle('current', n === stStep);
+    li.classList.toggle('done', n < stStep);
+    li.classList.toggle('locked', n > stStep);
+    li.querySelector('.si-step-body').hidden = n !== stStep;
+    li.querySelector('[data-done]').textContent = n < stStep ? done[n] : '';
+  });
+  if (stStep === 1) stRenderCodes();
+  if (stStep === 2) lcRender();
+  if (stStep === 3) rvRender();
+  if (stStep === 4) dpRender();
+}
+
+function stGo(n) { stStep = n; stRender(); $('stSteps').querySelector(`[data-step="${n}"]`).scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+
+// ---- 1. Transaction
+function stRenderCodes() {
+  const d = stData;
+  $('stCodes').innerHTML = (d.codes || []).map(r => {
+    const [w, cls] = stStatus(r), e = r.traffic || {};
+    return `<tr class="st-pick${stSel && stSel.code === r.code ? ' current' : ''}" data-code="${escapeHtml(r.code)}" tabindex="0">
+      <td>${stCode(r.code)}</td><td class="muted">${escapeHtml(r.description || '')}</td><td>${stCode(r.literal)}</td><td>${stCode(stOnUsProduct(r))}</td>
+      <td class="num">${e.approved || 0}</td><td>${stPill(cls, w)}</td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="muted">No codes in the code table.</td></tr>';
+  $('stFreeCodes').innerHTML = (d.freeCodes || []).map(c => `<option value="${escapeHtml(c)}">`).join('');
+}
+
+function stPick(code) { stReset(); stSel = { code }; lcInit(); stGo(2); }
+
+function stNewCode() {
+  const code = $('stNewCode').value.trim(), name = $('stNewName').value.trim();
+  $('stNewErr').textContent = !/^\d{2}$/.test(code) ? 'Enter two digits, 00 to 99' : stCodeRow(code) ? `Code ${code} is in use: pick it in the list` : '';
+  if ($('stNewErr').textContent) return;
+  stReset(); stSel = { code, name: name.toUpperCase(), isNew: true }; lcInit(); stGo(2);
+}
+
+// ---- 2. Life cycle
+function lcProducts() { const s = new Set(); ((stData || {}).literals || []).forEach(l => (l.mapped || []).forEach(p => s.add(p))); return [...s].sort(); }
+function lcProductInfo(p) { for (const c of (stData.codes || [])) for (const pi of (c.productInfo || [])) if (pi.product === p) return pi; return null; }
+
+function lcInit() {
+  const row = stCodeRow();
+  lc = { product: row ? stOnUsProduct(row) : (lcProducts()[0] || ''), newProduct: '', copyFrom: '', side: 'arc', offset: '', merchCol: '', cashGl: '', terminals: '',
+    cats: row ? ['O', 'R', 'F'].filter(c => (row.products || {})[c]) : ['O'], stages: {}, charges: {}, fee: {}, expiry: '', rules: [] };
+  if (!lc.cats.length) lc.cats = ['O'];
+  ru = null;
+}
+
+function lcStages() {
+  const row = stCodeRow();
+  if (row) return row.lifecycle || [];
+  return (((stData.codes || [])[0] || {}).lifecycle || []).map(s => Object.assign({}, s, { today: '–', source: 'new', applies: true }));
+}
+const lcToday = (id) => ((lcStages().find(s => s.id === id) || {}).today || '');
+
+function lcRender() {
+  const row = stCodeRow(), opt = (v, t, sel) => `<option value="${escapeHtml(v)}"${v === sel ? ' selected' : ''}>${escapeHtml(t)}</option>`;
+  const prods = lcProducts();
+  $('lcProduct').innerHTML = prods.map(p => opt(p, p, lc.product)).join('') + opt('__new', 'New product…', lc.product);
+  $('lcNewProductRow').hidden = lc.product !== '__new';
+  $('lcCopyFrom').innerHTML = prods.map(p => opt(p, p, lc.copyFrom)).join('');
+  ['O', 'R', 'F'].forEach(c => { $('lcCat' + c).checked = lc.cats.includes(c); });
+  $('lcSide').value = lc.side;
+  $('lcSideRow').hidden = lc.side === 'arc' && !lc.offset && !lc.showOffset;
+  $('lcSideRow').hidden = false;
+  $('lcOffsetField').hidden = lc.side !== 'arc';
+  $('lcMerchField').hidden = lc.side !== 'merchant';
+  $('lcCashGlField').hidden = $('lcTermField').hidden = lc.side !== 'cashgl';
+  const cols = ((stData.merchants || {}).columns || []).map(c => c.toUpperCase());
+  $('lcMerchCol').innerHTML = cols.length ? cols.map(c => opt(c, c, lc.merchCol)).join('') : opt('', "Merchant table isn't readable", '');
+  const pi = lcProductInfo(lc.product === '__new' ? lc.copyFrom : lc.product);
+  $('lcOffset').placeholder = pi && pi.offsets && pi.offsets.length ? pi.offsets.join(' / ') : 'keep';
+  $('lcOffset').value = lc.offset; $('lcCashGl').value = lc.cashGl; $('lcTerminals').value = lc.terminals; $('lcNewProduct').value = lc.newProduct;
+
+  // stages
+  $('lcStages').innerHTML = lcStages().map(s => {
+    const changed = lc.stages[s.id] != null && lc.stages[s.id] !== '' || (s.id === 'holdExpiry' && lc.expiry);
+    let wanted;
+    if (!s.applies) wanted = '<span class="muted">–</span>';
+    else if (s.id === 'holdExpiry') wanted = `<input type="number" class="st-days-in" data-lc-expiry min="0" max="365" value="${escapeHtml(lc.expiry)}" placeholder="days">`;
+    else if (s.id === 'noFunds') wanted = '<span class="muted">Decline fee below</span>';
+    else if (s.how === 'core' || s.how === 'look' || !(s.actions || []).length) wanted = '<span class="muted">As today</span>';
+    else wanted = `<select data-lc-stage="${escapeHtml(s.id)}">${opt('', 'As today', lc.stages[s.id] || '')}${(s.actions || []).map(a => opt(a, a, lc.stages[s.id] || '')).join('')}</select>`;
+    const how = !s.applies ? '' : changed ? stPill(s.how === 'setting' ? 'warn' : 'neutral', LC_HOW[s.how] || s.how)
+      : s.how === 'look' ? stPill('neutral', 'Needs a look') : stPill('ok', 'As today');
+    return `<tr class="${changed ? 'current' : ''}"><td><b class="st-stage">${escapeHtml(s.label)}</b><span class="sub mono">${escapeHtml(s.mti)}</span></td>
+      <td class="muted">${escapeHtml(s.today)}${s.source === 'traffic' ? ' <span class="st-src" title="Seen in recent traffic">●</span>' : ''}</td><td>${wanted}</td><td>${how}</td></tr>`;
+  }).join('');
+
+  // charges of the product
+  const charges = ((pi && pi.arc && pi.arc[0]) || {}).charges || [];
+  $('lcChargesOf').textContent = pi ? `on ${pi.product}'s ARC` : '';
+  $('lcCharges').innerHTML = charges.map(c => {
+    const e = lc.charges[c.slot] || {};
+    const cur = c.amount ? c.amount : c.type === 'F' ? 'from the message' : '–';
+    return `<tr><td>${escapeHtml(c.description || 'slot ' + c.slot)}</td>
+      <td><input type="text" class="mono st-in" data-lc-charge="${escapeHtml(c.slot)}" data-k="amount" value="${escapeHtml(e.amount || '')}" placeholder="${escapeHtml(cur)}"></td>
+      <td><input type="text" class="mono st-in" data-lc-charge="${escapeHtml(c.slot)}" data-k="rate" value="${escapeHtml(e.rate || '')}" placeholder="${escapeHtml(c.rate || '–')}"></td>
+      <td><input type="text" class="mono st-in" data-lc-charge="${escapeHtml(c.slot)}" data-k="gl" value="${escapeHtml(e.gl || '')}" placeholder="${escapeHtml(c.gl || '–')}"></td>
+      <td><select data-lc-charge="${escapeHtml(c.slot)}" data-k="tracked">${opt('', c.tracked === 'Y' ? 'As today: tracked' : 'As today: not tracked', e.tracked || '')}${opt('Y', 'Track it, collect later', e.tracked || '')}${opt('N', "Don't track", e.tracked || '')}</select></td></tr>`;
+  }).join('') || '<tr><td colspan="5" class="muted">No ARC charges for this product.</td></tr>';
+
+  // decline fee (the bank's own code: every transaction)
+  const fee = stData.declineFee || {};
+  $('lcFeeWhere').textContent = fee.amount ? 'your code, every transaction' : '';
+  $('lcFee').innerHTML = !fee.amount ? '<p class="si-note">No decline fee in your code.</p>'
+    : `<div class="st-fee"><label class="field"><span>Amount</span><input type="text" class="mono st-in" id="lcFeeAmount" value="${escapeHtml(lc.fee.amount || '')}" placeholder="${escapeHtml(fee.amount)}"></label>
+       <div class="field"><span>Charged when declined for</span><div class="st-chips">${(fee.codes || []).map(c => `<label class="chk"><input type="checkbox" data-lc-feecode="${escapeHtml(c)}"${(lc.fee.codes || fee.codes).includes(c) ? ' checked' : ''}> <span class="mono">${escapeHtml(c)}</span></label>`).join('')}</div></div>
+       <p class="summary-hint">${fee.tracked ? 'Today: always tracked (collected later), never charged at once.' : ''}</p></div>`;
+
+  // balance (read-only in this version)
+  const feats = stData.features || [], f54 = (row && row.f54) || [];
+  $('lcBalance').innerHTML = `<dt>Reply balances (F54)</dt><dd>${escapeHtml(f54.length ? f54.join(', ') : '–')}</dd>
+    <dt>Advices when short</dt><dd>${feats.includes('FORCE_POST_SW') ? 'Post anyway when feature FORCE_POST_SW is on' : 'Declined'}</dd>
+    <dt>Checked against</dt><dd>The account's available balance and overdraft</dd>`;
+  ruRenderList();
+  $('lcErr').textContent = '';
+}
+
+/** What the agent plans from: keep the literal unless the money family or product changes. */
+function lcRequest() {
+  const row = stCodeRow(), today = (id) => lcToday(id);
+  const fin = lc.stages.financial, auth = lc.stages.auth;
+  const family = (f, a) => f === 'Credit customer' ? 'credit' : (row && (row.route || {}).posting === 'two') ? 'transfer' : a === 'Hold amount' ? 'hold' : 'debit';
+  const prodChanged = lc.product === '__new' || (row && lc.product !== stOnUsProduct(row));
+  const famChanged = (fin === 'Debit customer' || fin === 'Credit customer') && !today('financial').startsWith(fin);
+  // a hook decides stages per literal: a literal other codes share can't take one, so the code gets its own
+  const hookStage = LC_HOOK_STAGES.some(id => lc.stages[id] && !(id === 'financial' && (lc.stages[id] === 'Debit customer' || lc.stages[id] === 'Credit customer')));
+  const shared = row && (stData.codes || []).filter(c => c.literal === row.literal).length > 1;
+  let pattern = 'keep';
+  if (!row) pattern = family(fin, auth || 'Hold amount');
+  else if (famChanged || prodChanged || lc.side !== 'arc' || (hookStage && shared) || (row && (row.route || {}).kind === 'none' && (fin || auth)))
+    pattern = family(fin || (today('financial').startsWith('Credit') ? 'Credit customer' : 'Debit customer'), auth || (today('auth').startsWith('Hold') ? 'Hold amount' : ''));
+  const r = { pattern, code: stSel.code, categories: lc.cats, otherSide: lc.side, literal: 'auto' };
+  if (lc.product === '__new') r.newProduct = { code: lc.newProduct.toUpperCase(), copyFrom: lc.copyFrom }; else r.product = lc.product;
+  if (lc.side === 'arc' && lc.offset) r.offsetGl = lc.offset;
+  if (lc.side === 'merchant') r.merchantColumn = lc.merchCol || $('lcMerchCol').value;
+  if (lc.side === 'cashgl') { r.cashGl = lc.cashGl; r.terminals = lc.terminals.split(/[\s,]+/).filter(Boolean); }
+  if (stSel.isNew && stSel.name) r.description = stSel.name;
+  const stages = {};
+  for (const id of LC_HOOK_STAGES) if (lc.stages[id]) stages[id] = lc.stages[id];
+  if (Object.keys(stages).length) r.stages = stages;
+  const ch = Object.entries(lc.charges).map(([slot, e]) => Object.assign({ slot, name: e.name }, e)).filter(e => e.amount || e.rate || e.gl || e.tracked);
+  if (ch.length) r.charges = ch;
+  if (lc.expiry !== '') {
+    const p = (stData.params || []).find(x => row && (row.mappingRows || []).some(m => (m.channel || '').toUpperCase() === String(x.channel || '').toUpperCase())) || (stData.params || [])[0];
+    if (p) r.holdExpiry = { channel: p.channel, days: lc.expiry };
+  }
+  const fee = stData.declineFee || {};
+  if (lc.fee.amount || lc.fee.codes) r.declineFee = Object.assign({}, lc.fee.amount ? { amount: lc.fee.amount } : {}, lc.fee.codes ? { codes: lc.fee.codes } : {});
+  if (lc.fee.codes && fee.codes && lc.fee.codes.length === fee.codes.length) delete (r.declineFee || {}).codes;
+  if ((lc.rules || []).length) r.rules = lc.rules;
+  return r;
+}
+
+async function lcReview() {
+  const t = activeTarget(), btn = $('lcNext');
+  if (!lc.cats.length) { $('lcErr').textContent = 'Pick at least one of on-us, remote on-us, off-us'; return; }
+  if (lc.product === '__new' && !/^[A-Z0-9]{4}$/i.test(lc.newProduct)) { $('lcErr').textContent = 'A new product code is four letters or digits'; return; }
+  if (ru) { $('lcErr').textContent = ru.i >= 0 ? 'Save or cancel the rule you are editing' : 'Add or cancel the rule you started'; return; }
+  btn.disabled = true;
+  try {
+    rvPlan = await targetsApi('/api/setup/plan', { target: t.id, request: lcRequest() });
+    if (!(rvPlan.steps || []).length && !(rvPlan.blockers || []).length) { $('lcErr').textContent = 'Nothing to change: set at least one Wanted value, charge, fee, setting or rule'; rvPlan = null; return; }
+    dpPack = null;
+    stGo(3);
+  } catch (e) { $('lcErr').textContent = e.message; }
+  finally { btn.disabled = false; }
+}
+
+// ---- Rules: the bank's own business rules, placed in its switch hooks (WHEN a hook · IF conditions · THEN an action)
+const RU_OPS = { number: ['>', '>=', '<', '<=', '=', '≠', 'between'], text: ['=', '≠', 'in', 'not in'], digits2: ['=', '≠', 'in', 'not in'],
+  digits3: ['=', '≠', 'in', 'not in'], digits4: ['=', '≠', 'in', 'not in'], onus: ['=', '≠'], prefix: ['in', 'not in'], time: ['between', '>=', '<='], day: ['in', 'not in'] };
+const RU_OP_NAME = { in: 'is one of', 'not in': 'is not one of', between: 'between' };
+const RU_PREFIX_OP = { in: 'starts with', 'not in': "doesn't start with" };
+const RU_HINT = { number: '500.00', text: 'POS', digits2: '01', digits3: '840', digits4: '0200', prefix: '400000, 5', time: '22:00 - 06:00', day: 'SAT, SUN' };
+const RU_ONUS = { O: 'On-us', R: 'Remote on-us', F: 'Off-us' };
+const RU_ACTION = { decline: 'Decline with an error code', limit: 'Limit per day (count / amount)', hold: 'Hold the amount', post: 'Post at once', nothing: 'Approve, move no money',
+  retry: 'Post; retry later if it fails', account: 'Other side: this account', merchant: "Other side: the merchant's account (on-us)", fee: 'Add a tracked fee (as your decline fee)', code: 'Your own code (PL/SQL)' };
+let ru = null;   // the rule being added or edited
+
+/** Hooks a rule can use: the core calls them (or a caller couldn't be read), and the extension package is switched on. */
+const ruExtOff = () => ((stData && stData.extensibility) || {}).state === 'off';
+const ruHooks = () => ((stData && stData.hooks) || []).filter(h => h.called !== 'no' && !(ruExtOff() && /EXT_SWITCHSERVICE/.test(h.package)));
+const ruHook = (id) => ruHooks().find(h => h.id === id) || null;
+/** The hook's name in lists: its life-cycle label, with the package when both packages have that point. */
+function ruHookName(h) {
+  const base = h.known ? h.label : h.function;
+  const twin = h.known && ruHooks().some(x => x !== h && x.known && x.label === h.label);
+  return twin ? `${base} · ${/CUSTOM/.test(h.package) ? 'custom' : 'extension'}` : base;
+}
+const ruActionName = (a) => ((stData && stData.ruleActions) || {})[a] || RU_ACTION[a] || a;
+/** The condition fields for a hook: the error code only once there is one (the reply side). */
+function ruFields(hook) {
+  const late = hook && /UPDATE_RESP|BUILD_ATM_REPLY/.test(hook.function);
+  return ((stData && stData.ruleFields) || []).filter(f => f.id !== 'error' || late);
+}
+const ruField = (id) => ((stData && stData.ruleFields) || []).find(f => f.id === id) || { id, label: id, kind: 'text' };
+function ruOpName(f, op) { return f.kind === 'prefix' ? (RU_PREFIX_OP[op] || op) : (RU_OP_NAME[op] || op); }
+function ruCondText(c) {
+  const f = ruField(c.field);
+  const v = f.kind === 'onus' ? (RU_ONUS[c.value] || c.value) : c.value;
+  return `${f.kind === 'prefix' ? f.label.replace(/\s*\(starts with\)/i, '') : f.label} ${ruOpName(f, c.op)} ${v}`;
+}
+function ruThenText(r) {
+  const p = r.params || {};
+  const extra = r.action === 'decline' ? p.error : r.action === 'limit' ? [p.count ? `${p.count} a day` : '', p.amount ? `up to ${p.amount} a day` : ''].filter(Boolean).join(', ') + ` per ${p.per === 'card' ? 'card' : 'account'}, else ${p.error}`
+    : r.action === 'account' ? p.account : r.action === 'merchant' ? p.column : r.action === 'fee' ? p.amount : r.action === 'code' ? `${String(p.plsql || '').split('\n').length} lines` : '';
+  return ruActionName(r.action) + (extra ? ': ' + extra : '');
+}
+/** Error codes the bank already uses: its decline fee's codes and recent declines. */
+function ruErrCodes() {
+  const s = new Set(((stData && stData.declineFee) || {}).codes || []);
+  ((stData && stData.codes) || []).forEach(c => (((c.traffic || {}).declines) || []).forEach(d => d.error && s.add(d.error)));
+  return [...s].sort();
+}
+
+function ruRenderList() {
+  const rules = (lc && lc.rules) || [], hooks = ruHooks();
+  $('ruListWrap').hidden = !rules.length;
+  $('ruList').innerHTML = rules.map((r, i) => {
+    const h = ruHook(r.hook) || { label: r.hook, function: '' };
+    const conds = (r.scope === 'all' ? [] : [`Code ${stSel.code}`]).concat((r.conditions || []).map(ruCondText));
+    return `<tr><td class="mono">${i + 1}</td><td><b>${escapeHtml(h.id ? ruHookName(h) : h.label)}</b><span class="sub mono">${escapeHtml(h.function)}</span></td>
+      <td>${conds.length ? conds.map(escapeHtml).join('<span class="muted"> · </span>') : '<span class="muted">Always</span>'}</td>
+      <td>${escapeHtml(ruThenText(r))}</td>
+      <td class="st-rule-btns"><button type="button" class="btn sm ghost-plain" data-ru-edit="${i}">Edit</button><button type="button" class="btn sm ghost-plain" data-ru-del="${i}">Remove</button></td></tr>`;
+  }).join('');
+  const none = !hooks.length;
+  const off = ruExtOff() ? `Your core skips the extension package (${escapeHtml((stData.extensibility || {}).detail || 'G_CALL_EXTENSIBILITY is off')}): only custom hooks are offered. ` : '';
+  $('ruNone').innerHTML = none ? off + 'Rules go into your extension and custom packages: SwitchProof needs their source. <button type="button" class="btn sm ghost-plain" id="ruSources">Sources</button>'
+    : off + (!rules.length && !ru ? 'None. Add one for a limit, a decline, a fee or your own logic at any point of the transaction.' : '');
+  $('ruNone').hidden = !$('ruNone').innerHTML;
+  $('ruAdd').hidden = none || !!ru;
+  ruRenderForm();
+}
+
+function ruRenderForm() {
+  $('ruForm').hidden = !ru;
+  if (!ru) return;
+  const opt = (v, t, sel, dis) => `<option value="${escapeHtml(v)}"${v === sel ? ' selected' : ''}${dis ? ' disabled' : ''}>${escapeHtml(t)}</option>`;
+  const hook = ruHook(ru.hook);
+  const groups = [['Life cycle', h => h.known && h.called === 'yes'], ['More hook points', h => !h.known && h.called === 'yes'], ['Call not confirmed', h => h.called !== 'yes']];
+  $('ruHook').innerHTML = groups.map(([g, f]) => {
+    const hs = ruHooks().filter(f);
+    return hs.length ? `<optgroup label="${g}">${hs.map(h => opt(h.id, ruHookName(h), ru.hook)).join('')}</optgroup>` : '';
+  }).join('');
+  $('ruScope').innerHTML = opt('code', `This code (${stSel.code})`, ru.scope) + opt('all', 'Every code', ru.scope);
+  const acts = (hook && hook.actions) || [];
+  if (!acts.includes(ru.action)) ru.action = acts[0] || '';
+  $('ruAction').innerHTML = acts.map(a => opt(a, ruActionName(a) + (a === 'fee' && !stData.feeCopyable ? ' (no fee in your code to copy)' : ''), ru.action, a === 'fee' && !stData.feeCopyable)).join('');
+
+  const fields = ruFields(hook);
+  $('ruConds').innerHTML = ru.conds.map((c, i) => {
+    const f = ruField(c.field), ops = RU_OPS[f.kind] || RU_OPS.text;
+    if (!ops.includes(c.op)) c.op = ops[0];
+    const val = f.kind === 'onus'
+      ? `<select data-ru-cv="${i}">${Object.entries(RU_ONUS).map(([k, t]) => opt(k, t, c.value || 'O')).join('')}</select>`
+      : `<input type="text" class="mono st-in" data-ru-cv="${i}" value="${escapeHtml(c.value || '')}" placeholder="${escapeHtml(RU_HINT[f.kind] || '')}">`;
+    return `<div class="st-cond"><select data-ru-cf="${i}">${fields.map(x => opt(x.id, x.label, c.field)).join('')}</select>
+      <select data-ru-co="${i}">${ops.map(o => opt(o, ruOpName(f, o), c.op)).join('')}</select>${val}
+      <button type="button" class="btn sm ghost-plain" data-ru-cx="${i}" aria-label="Remove condition">×</button></div>`;
+  }).join('') || '<p class="summary-hint">No condition: every transaction it covers.</p>';
+
+  const p = ru.params, inp = (k, label, ph, cls = 'mono') => `<label class="field"><span>${label}</span><input type="text" class="${cls} st-in" data-ru-p="${k}" value="${escapeHtml(p[k] || '')}" placeholder="${escapeHtml(ph)}"${k === 'error' ? ' list="ruErrList"' : ''}></label>`;
+  const errs = `<datalist id="ruErrList">${ruErrCodes().map(e => `<option value="${escapeHtml(e)}">`).join('')}</datalist>`;
+  let ph = '';
+  switch (ru.action) {
+    case 'decline': ph = `<div class="field-row three">${inp('error', 'Error code', 'ST-LMT-037')}</div>${errs}<p class="summary-hint">Your response map turns it into the reply code; an unmapped code replies 05.</p>`; break;
+    case 'limit': ph = `<div class="field-row three">${inp('count', 'Times a day', '3')}${inp('amount', 'Amount a day', '1000.00')}
+        <label class="field"><span>Per</span><select data-ru-p="per">${opt('account', 'Account', p.per || 'account')}${opt('card', 'Card', p.per || 'account')}</select></label></div>
+        <div class="field-row three">${inp('error', 'Over the limit: error code', 'ST-LMT-037')}</div>${errs}`; break;
+    case 'account': ph = `<div class="field-row three">${inp('account', 'Account or GL', '000100000001')}</div>`; break;
+    case 'merchant': {
+      const cols = ((stData.merchants || {}).columns || []).map(c => c.toUpperCase());
+      ph = `<div class="field-row three"><label class="field"><span>Merchant column with the account</span><select data-ru-p="column">${cols.length ? cols.map(c => opt(c, c, p.column || '')).join('') : opt('', "Merchant table isn't readable", '')}</select></label></div>`;
+      if (!p.column && cols.length) p.column = cols[0];
+      break;
+    }
+    case 'fee': ph = `<div class="field-row three">${inp('amount', 'Fee', ((stData.declineFee || {}).amount) || '1.50')}</div><p class="summary-hint">Tracked like your decline fee: collected when funds arrive.</p>`; break;
+    case 'code': ph = `<label class="field"><span>Your PL/SQL</span><textarea class="mono st-code-in" data-ru-p="plsql" rows="7" spellcheck="false" placeholder="P_ERR_CODE := 'ST-LMT-037';\nRETURN FALSE;">${escapeHtml(p.plsql || '')}</textarea></label>
+        <p class="summary-hint">Runs inside the IF. The transaction is P_TY_ATM_TXN_REC; at ${escapeHtml(hook ? hook.function : '')} RETURN FALSE declines.</p>`; break;
+    case 'hold': case 'post': case 'nothing': case 'retry': ph = '<p class="summary-hint">For the matching message only; the core skips its own decision for it.</p>'; break;
+  }
+  $('ruParams').innerHTML = ph;
+  $('ruSave').textContent = ru.i >= 0 ? 'Save rule' : 'Add rule';
+  $('ruErr').textContent = '';
+}
+
+function ruStart(i) {
+  const hooks = ruHooks();
+  if (i >= 0) { const r = lc.rules[i]; ru = { i, hook: r.hook, scope: r.scope || 'code', action: r.action, conds: (r.conditions || []).map(c => Object.assign({}, c)), params: Object.assign({}, r.params || {}) }; }
+  else {
+    const first = hooks.find(h => h.function === 'FN_TXN_CONTROL') || hooks[0];
+    ru = { i: -1, hook: first ? first.id : '', scope: 'code', action: '', conds: [], params: {} };
+  }
+  ruRenderList();
+  $('ruForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function ruSave() {
+  const hook = ruHook(ru.hook), p = ru.params, err = (m) => { $('ruErr').textContent = m; };
+  if (!hook) return err('Pick when the rule runs');
+  if (!ru.action) return err('Pick what the rule does');
+  for (const c of ru.conds) if (!String(c.value || (ruField(c.field).kind === 'onus' ? 'O' : '')).trim()) return err(`${ruField(c.field).label}: give a value`);
+  if ((ru.action === 'decline' || ru.action === 'limit') && !p.error) return err('Give the error code to decline with');
+  if (ru.action === 'limit' && !p.count && !p.amount) return err('Give the times a day, the amount a day, or both');
+  if (ru.action === 'account' && !p.account) return err('Give the account or GL');
+  if (ru.action === 'fee' && !p.amount) return err('Give the fee');
+  if (ru.action === 'code' && !String(p.plsql || '').trim()) return err('Write the PL/SQL');
+  const conds = ru.conds.map(c => ({ field: c.field, op: c.op, value: ruField(c.field).kind === 'onus' ? (c.value || 'O') : String(c.value).trim() }));
+  const keep = { decline: ['error'], limit: ['count', 'amount', 'per', 'error'], account: ['account'], merchant: ['column'], fee: ['amount'], code: ['plsql'] }[ru.action] || [];
+  const params = {};
+  keep.forEach(k => { if (p[k] != null && p[k] !== '') params[k] = k === 'plsql' ? p[k] : String(p[k]).trim(); });
+  if (ru.action === 'limit' && !params.per) params.per = 'account';
+  const rule = { hook: ru.hook, scope: ru.scope, conditions: conds, action: ru.action, params };
+  if (ru.i >= 0) lc.rules[ru.i] = rule; else lc.rules.push(rule);
+  ru = null;
+  ruRenderList();
+}
+
+// ---- 3. Review
+const RV_KIND = { code: 'Code table', mapping: 'Product mapping', product: 'New product', literal: 'New literal', arc: 'ARC offset', 'arc-charges': 'ARC charges',
+  'arc-charge': 'Charge', terminal: 'Terminal', 'hook-custom': 'Hook', 'hook-ext': 'Hook', 'hook-merchant': 'Hook', 'hook-control': 'Hook', 'hook-rule': 'Rule', setting: 'Setting', fee: 'Your code' };
+function rvRender() {
+  const p = rvPlan;
+  if (!p) { $('rvBody').innerHTML = ''; return; }
+  const blockers = p.blockers || [], warnings = p.warnings || [];
+  const label = blockers.length ? ['Blocked', 'bad'] : p.hooks || (p.steps || []).some(s => String(s.kind).startsWith('hook') || s.kind === 'fee') ? ['Tables and code', 'warn'] : ['Table changes only', 'ok'];
+  $('rvBody').innerHTML = `<p class="st-sum">${escapeHtml(p.summary || '')} ${stPill(label[1], label[0])}</p>
+    ${blockers.length ? `<ul class="st-notes">${blockers.map(b => `<li class="bad">${escapeHtml(b)}</li>`).join('')}</ul>` : ''}
+    <div class="table-wrap"><table class="tbl st-review"><thead><tr><th>What</th><th>Change</th></tr></thead><tbody>
+      ${(p.steps || []).map(s => `<tr><td>${stPill(String(s.kind).startsWith('hook') || s.kind === 'fee' ? 'warn' : s.kind === 'setting' ? 'warn' : 'neutral', RV_KIND[s.kind] || s.kind)}</td><td class="muted">${escapeHtml(s.text)}</td></tr>`).join('')}
+    </tbody></table></div>
+    ${warnings.length ? `<details class="st-more"><summary>Notes (${warnings.length})</summary><ul>${warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul></details>` : ''}`;
+  $('rvBuild').hidden = !!blockers.length || !(p.steps || []).length;
+  $('rvErr').textContent = '';
+}
+
+async function rvBuild() {
+  const t = activeTarget(), b = $('rvBuild');
+  $('rvErr').textContent = '';
+  b.disabled = true; b.textContent = 'Building…';
+  try { dpPack = await targetsApi('/api/setup/pack', { target: t.id, request: lcRequest() }); dpChecked.clear(); dpOpenFiles.clear(); stGo(4); }
+  catch (e) { $('rvErr').textContent = e.message; }
+  finally { b.disabled = false; b.textContent = 'Build the pack'; }
+}
+
+// ---- 4. Deploy
+function dpChecklist(p) {
+  const files = (p.files || []).map(f => f.name), items = [['backup', 'Back up', '01-backup.sql']];
+  files.filter(n => /^02[a-z]-/.test(n)).forEach(n => items.push([n, 'Compile, check VALID', n]));
+  items.push(['change', 'Change', '03-change.sql'], ['check', 'Check, then COMMIT', '04-after-checks.sql'], ['test', 'Test on UAT', `${(p.tests || []).length} tests below`], ['recheck', 'Re-check setup', 'button below']);
+  return items;
+}
+function dpRender() {
+  const p = dpPack;
+  if (!p) { $('dpBody').innerHTML = ''; return; }
+  const lines = (s) => String(s || '').split('\n').length;
+  $('dpBody').innerHTML = `<div class="st-pack-head"><p class="st-sum">Pack ${escapeHtml(p.id)}</p>
+      <a class="btn sm primary-sm" href="${escapeHtml(AGENT.link('/api/setup/pack?id=' + encodeURIComponent(p.id)))}" download>Download (.zip)</a></div>
+    <ul class="st-check">${dpChecklist(p).map(([k, t, f]) => `<li><label class="chk"><input type="checkbox" data-dp-check="${escapeHtml(k)}"${dpChecked.has(k) ? ' checked' : ''}> <span>${escapeHtml(t)}</span></label><span class="mono summary-hint">${escapeHtml(f)}</span></li>`).join('')}</ul>
+    <details class="st-more"><summary>Tests (${(p.tests || []).length})</summary><ul>${(p.tests || []).map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul></details>
+    <details class="st-more"><summary>Screen steps instead of 03-change.sql (${(p.screenSteps || []).length})</summary><ol>${(p.screenSteps || []).map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ol></details>
+    <details class="st-more"${dpOpenFiles.size ? ' open' : ''}><summary>Files (${(p.files || []).length})</summary>
+      <div class="table-wrap"><table class="tbl st-files"><tbody>${(p.files || []).map((f, i) => `<tr><td class="mono">${escapeHtml(f.name)}</td><td class="num">${lines(f.text)}</td>
+        <td><div class="actions"><button type="button" class="btn sm ghost-plain" data-dp-view="${i}">${dpOpenFiles.has(i) ? 'Hide' : 'View'}</button><button type="button" class="btn sm ghost-plain" data-dp-copy="${i}">Copy</button></div></td></tr>`
+        + (dpOpenFiles.has(i) ? `<tr class="st-detail"><td colspan="3"><pre class="st-code">${escapeHtml(f.text)}</pre></td></tr>` : '')).join('')}</tbody></table></div></details>`;
+}
+
+// ---- Sources dialog
+function stRenderSources() {
+  const d = stData || {};
+  $('stSources').innerHTML = (d.sources || []).map(p => {
+    const [label, cls] = ST_FROM[p.from] || [p.from, 'neutral'];
+    const act = p.from === 'missing' ? `<button type="button" class="btn sm ghost-plain" data-st-add="${escapeHtml(p.name)}">Upload</button>`
+      : p.from === 'file' ? `<button type="button" class="btn sm ghost-plain" data-st-remove="${escapeHtml(p.name)}">Remove</button>` : '';
+    const why = p.from === 'missing' ? `<span class="sub">${escapeHtml(p.detail || '')}</span>${p.grant ? `<span class="sub st-grant"><code class="mono">${escapeHtml(p.grant)}</code>
+      <button type="button" class="btn sm ghost-plain" data-st-grant="${escapeHtml(p.grant)}">Copy</button></span>` : ''}` : '';
+    return `<tr><td class="mono" title="${escapeHtml(p.role || '')}">${escapeHtml(p.name)}</td><td>${stPill(cls, label)}${why}</td><td class="num">${p.lines || '–'}</td><td>${act}</td></tr>`;
+  }).join('') || '<tr><td colspan="4" class="muted">Read the setup first.</td></tr>';
+  const tn = d.tableNotes || {};
+  const how = { settings: 'set in Bank database', synonym: `found through ${d.readBy}'s synonyms`, objects: 'the only schema that owns FLEXCUBE' }[d.ownerFrom];
+  $('stTables').innerHTML = `<span>Schema: <span class="mono">${escapeHtml(d.owner || '–')}</span>${how ? ' (' + escapeHtml(how) + ')' : d.ownerFrom ? ` <span class="warn-t">(${escapeHtml(d.ownerFrom)})</span>` : ''}</span><br>`
+    + Object.entries(d.tables || {}).map(([k, v]) => `<span class="mono">${escapeHtml(v)}</span>${tn[k] ? ` <span class="warn-t">(${escapeHtml(tn[k])})</span>` : ''}`).join('<br>')
+    + ((d.missingTables || []).length ? `<br><span class="warn-t">Not readable: ${escapeHtml(d.missingTables.join(', '))}</span>` : '') || '—';
+}
+
+// ---- events
+$('stRead').addEventListener('click', stRead);
+$('stDbOpen').addEventListener('click', () => { const t = activeTarget(); if (t) openDbDialog(t); });
+$('stSourcesBtn').addEventListener('click', () => { stRenderSources(); $('stSrcDlg').showModal(); });
+$('stSrcClose').addEventListener('click', () => $('stSrcDlg').close());
+$('stCodes').addEventListener('click', (e) => { const tr = e.target.closest('tr.st-pick'); if (tr) stPick(tr.dataset.code); });
+$('stCodes').addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('tr.st-pick')) { e.preventDefault(); stPick(e.target.dataset.code); } });
+$('stNewGo').addEventListener('click', stNewCode);
+$('stNewCode').addEventListener('input', () => { $('stNewErr').textContent = ''; });
+document.querySelectorAll('#stSteps .si-step-head').forEach(h => h.addEventListener('click', () => { const n = Number(h.parentNode.dataset.step); if (n < stStep) stGo(n); }));
+['lcProduct', 'lcSide', 'lcCopyFrom', 'lcMerchCol'].forEach(id => $(id).addEventListener('change', () => {
+  lc.product = $('lcProduct').value; lc.side = $('lcSide').value; lc.copyFrom = $('lcCopyFrom').value; lc.merchCol = $('lcMerchCol').value;
+  if (id === 'lcProduct') lc.charges = {};
+  lcRender();
+}));
+[['lcOffset', 'offset'], ['lcCashGl', 'cashGl'], ['lcTerminals', 'terminals'], ['lcNewProduct', 'newProduct']].forEach(([id, k]) => $(id).addEventListener('input', () => { lc[k] = $(id).value.trim(); }));
+['O', 'R', 'F'].forEach(c => $('lcCat' + c).addEventListener('change', () => { lc.cats = ['O', 'R', 'F'].filter(x => $('lcCat' + x).checked); }));
+$('lcStages').addEventListener('change', (e) => {
+  const s = e.target.closest('[data-lc-stage]'), x = e.target.closest('[data-lc-expiry]');
+  if (s) { lc.stages[s.dataset.lcStage] = s.value; lcRender(); }
+  if (x) { lc.expiry = x.value.trim(); lcRender(); }
+});
+$('lcCharges').addEventListener('change', (e) => {
+  const el = e.target.closest('[data-lc-charge]');
+  if (!el) return;
+  const slot = el.dataset.lcCharge, row = el.closest('tr');
+  lc.charges[slot] = Object.assign(lc.charges[slot] || {}, { [el.dataset.k]: el.value.trim(), name: row.cells[0].textContent });
+});
+$('lcFee').addEventListener('change', (e) => {
+  if (e.target.id === 'lcFeeAmount') lc.fee.amount = e.target.value.trim();
+  if (e.target.matches('[data-lc-feecode]')) lc.fee.codes = [...$('lcFee').querySelectorAll('[data-lc-feecode]')].filter(c => c.checked).map(c => c.dataset.lcFeecode);
+});
+// rules
+$('ruAdd').addEventListener('click', () => ruStart(-1));
+$('ruCancel').addEventListener('click', () => { ru = null; ruRenderList(); });
+$('ruSave').addEventListener('click', ruSave);
+$('ruCondAdd').addEventListener('click', () => {
+  const f = ruFields(ruHook(ru.hook)).find(x => !ru.conds.some(c => c.field === x.id) && x.id !== 'code') || ruFields(ruHook(ru.hook))[0];
+  if (f) ru.conds.push({ field: f.id, op: (RU_OPS[f.kind] || RU_OPS.text)[0], value: '' });
+  ruRenderForm();
+});
+['ruHook', 'ruScope', 'ruAction'].forEach(id => $(id).addEventListener('change', () => {
+  ru.hook = $('ruHook').value; ru.scope = $('ruScope').value;
+  if (id === 'ruAction') { ru.action = $('ruAction').value; ru.params = {}; }
+  if (id === 'ruHook') { const ok = ruFields(ruHook(ru.hook)).map(f => f.id); ru.conds = ru.conds.filter(c => ok.includes(c.field)); }
+  ruRenderForm();
+}));
+$('ruConds').addEventListener('change', (e) => {
+  const t = e.target, i = Number(t.dataset.ruCf ?? t.dataset.ruCo ?? t.dataset.ruCv);
+  if (Number.isNaN(i)) return;
+  const c = ru.conds[i];
+  if (t.dataset.ruCf != null) { c.field = t.value; c.op = (RU_OPS[ruField(c.field).kind] || RU_OPS.text)[0]; c.value = ''; ruRenderForm(); }
+  else if (t.dataset.ruCo != null) c.op = t.value;
+  else c.value = t.value;
+});
+$('ruConds').addEventListener('input', (e) => { const t = e.target; if (t.dataset.ruCv != null) ru.conds[Number(t.dataset.ruCv)].value = t.value; });
+$('ruConds').addEventListener('click', (e) => { const x = e.target.closest('[data-ru-cx]'); if (x) { ru.conds.splice(Number(x.dataset.ruCx), 1); ruRenderForm(); } });
+['input', 'change'].forEach(ev => $('ruParams').addEventListener(ev, (e) => { const k = e.target.dataset.ruP; if (k) ru.params[k] = e.target.value; }));
+$('ruList').addEventListener('click', (e) => {
+  const ed = e.target.closest('[data-ru-edit]'), del = e.target.closest('[data-ru-del]');
+  if (ed) ruStart(Number(ed.dataset.ruEdit));
+  if (del) { lc.rules.splice(Number(del.dataset.ruDel), 1); if (ru && ru.i >= 0) ru = null; ruRenderList(); }
+});
+$('ruNone').addEventListener('click', (e) => { if (e.target.closest('#ruSources')) { stRenderSources(); $('stSrcDlg').showModal(); } });
+$('lcNext').addEventListener('click', lcReview);
+$('rvBack').addEventListener('click', () => stGo(2));
+$('rvBuild').addEventListener('click', rvBuild);
+$('dpBody').addEventListener('change', (e) => { const c = e.target.closest('[data-dp-check]'); if (c) { if (c.checked) dpChecked.add(c.dataset.dpCheck); else dpChecked.delete(c.dataset.dpCheck); } });
+$('dpBody').addEventListener('click', async (e) => {
+  const v = e.target.closest('[data-dp-view]'), c = e.target.closest('[data-dp-copy]');
+  if (v) { const i = Number(v.dataset.dpView); if (dpOpenFiles.has(i)) dpOpenFiles.delete(i); else dpOpenFiles.add(i); dpRender(); }
+  if (c) { const f = dpPack.files[Number(c.dataset.dpCopy)]; try { await navigator.clipboard.writeText(f.text); toast(`${f.name} copied`, 'ok'); } catch (err) { toast('Copy is blocked here: use View, or Download', 'bad'); } }
+});
+$('dpNew').addEventListener('click', () => { stReset(); stRender(); });
+$('dpRecheck').addEventListener('click', async () => { await stRead(); const r = stCodeRow(); if (r) toast(`Code ${r.code}: ${stStatus(r)[0]}`, stStatus(r)[1] === 'ok' ? 'ok' : 'bad'); });
+$('stSources').addEventListener('click', async (e) => {
+  const add = e.target.closest('[data-st-add]'), rem = e.target.closest('[data-st-remove]'), gr = e.target.closest('[data-st-grant]');
+  if (gr) { try { await navigator.clipboard.writeText(gr.dataset.stGrant); toast('Grant copied: send it to your DBA', 'ok'); } catch (err) { toast('Copy is blocked here: select the text', 'bad'); } return; }
+  if (add) { $('stSourceFile').value = ''; $('stSourceFile').click(); }
+  if (rem && confirm(`Remove the ${rem.dataset.stRemove} file from this PC?`)) {
+    try { await targetsApi('/api/setup/source', { remove: rem.dataset.stRemove }); toast('File removed: read the setup again', 'ok'); } catch (err) { toast(err.message, 'bad'); }
+  }
+});
+$('stSourceFile').addEventListener('change', async () => {
+  const f = $('stSourceFile').files[0];
+  if (!f) return;
+  try { await targetsApi('/api/setup/source', { text: await f.text() }); $('stSrcDlg').close(); toast('Saved on this PC: reading the setup again…', 'ok'); stRead(); }
+  catch (err) { toast(err.message, 'bad'); }
+});
+
+// ---- Upload the setup (a bank that doesn't connect SwitchProof to its database)
+let upData = null, upFor = null;
+
+async function upLoad(body) {
+  const t = activeTarget();
+  if (!t) return;
+  try {
+    upData = body ? await targetsApi('/api/setup/upload', Object.assign({ target: t.id }, body))
+      : await targetsApi('/api/setup/upload?target=' + encodeURIComponent(t.id));
+    upRender();
+  } catch (e) { toast(e.message, 'bad'); }
+}
+
+function upRender() {
+  const d = upData || {};
+  if (document.activeElement !== $('stUpSchema')) $('stUpSchema').value = d.schema || '';
+  $('stUpRows').innerHTML = (d.exports || []).map(e => {
+    const u = (d.uploaded || {})[e.id];
+    return `<tr><td>${escapeHtml(e.label)}${e.optional ? ' <span class="summary-hint">optional</span>' : ''}</td>
+      <td>${u ? stPill('ok', `${u.rows} row${u.rows === 1 ? '' : 's'}`) + ` <span class="summary-hint">${escapeHtml(u.at)}</span>` : stPill(e.optional ? 'neutral' : 'warn', 'Not yet')}</td>
+      <td><div class="actions"><button type="button" class="btn sm ghost-plain" data-up-sql="${escapeHtml(e.id)}">Copy SELECT</button>
+      <button type="button" class="btn sm ghost-plain" data-up-file="${escapeHtml(e.id)}">${u ? 'Replace' : 'Upload'}</button>
+      ${u ? `<button type="button" class="btn sm ghost-plain" data-up-remove="${escapeHtml(e.id)}">Remove</button>` : ''}</div></td></tr>`;
+  }).join('');
+  $('stUpPkgs').innerHTML = (d.packageNames || []).map(n => {
+    const lines = (d.packages || {})[n];
+    return `<tr><td class="mono">${escapeHtml(n)}</td><td>${lines ? stPill('ok', lines + ' lines') : stPill('neutral', 'Not yet')}</td>
+      <td><div class="actions"><button type="button" class="btn sm ghost-plain" data-up-pkg="${escapeHtml(n)}">${lines ? 'Replace' : 'Upload'}</button>
+      ${lines ? `<button type="button" class="btn sm ghost-plain" data-up-pkgremove="${escapeHtml(n)}">Remove</button>` : ''}</div></td></tr>`;
+  }).join('');
+  $('stUpState').textContent = d.complete ? 'Ready to read. Without package files, what each code does is learned from the traffic export.' : "The exports marked Not yet are needed first.";
+}
+
+$('stUpOpen').addEventListener('click', () => { $('stUpDlg').showModal(); upLoad(); });
+$('stUpClose').addEventListener('click', () => $('stUpDlg').close());
+$('stUpSchema').addEventListener('change', () => upLoad({ schema: $('stUpSchema').value.trim() }));
+$('stUpDlg').addEventListener('click', async (e) => {
+  const sql = e.target.closest('[data-up-sql]'), file = e.target.closest('[data-up-file]'), rem = e.target.closest('[data-up-remove]');
+  const pkg = e.target.closest('[data-up-pkg]'), prem = e.target.closest('[data-up-pkgremove]');
+  if (sql) {
+    const x = (upData.exports || []).find(v => v.id === sql.dataset.upSql);
+    try { await navigator.clipboard.writeText(x.sql); toast('SELECT copied', 'ok'); } catch (err) { toast('Copy is blocked here', 'bad'); }
+  }
+  if (file || pkg) { upFor = file ? { kind: 'csv', id: file.dataset.upFile } : { kind: 'pkg', id: pkg.dataset.upPkg }; $('stUpFile').accept = file ? '.csv,.txt' : '.txt,.sql,.pkb,.pls,.plb'; $('stUpFile').value = ''; $('stUpFile').click(); }
+  if (rem) upLoad({ remove: rem.dataset.upRemove });
+  if (prem) { try { await targetsApi('/api/setup/source', { remove: prem.dataset.upPkgremove }); upLoad(); } catch (err) { toast(err.message, 'bad'); } }
+});
+$('stUpFile').addEventListener('change', async () => {
+  const f = $('stUpFile').files[0];
+  if (!f || !upFor) return;
+  try {
+    const text = await f.text();
+    if (upFor.kind === 'csv') await upLoad({ id: upFor.id, text, schema: $('stUpSchema').value.trim() });
+    else { await targetsApi('/api/setup/source', { text }); await upLoad(); }
+    toast(`${f.name} uploaded`, 'ok');
+  } catch (err) { toast(err.message, 'bad'); }
+});
+$('stUpRead').addEventListener('click', async () => {
+  if (!(upData && upData.complete)) { toast('Upload the exports marked Not yet first', 'bad'); return; }
+  $('stUpDlg').close();
+  await stRead();
+});
+
 // ---------- Plans: what this installation may use (licence from the SwitchProof website) ----------
 const PLAN_NAMES = { free: 'Free', team: 'Team', enterprise: 'Enterprise', developer: 'Developer' };
 let license = { plan: 'free', features: [], limits: { count: 200, concurrency: 5, uatCases: 10 }, featureNames: {} };
@@ -3035,6 +3657,9 @@ function renderPlan() {
   document.querySelector('.mode-tab[data-mode="bundle"]').classList.toggle('locked', !can('bundles'));
   document.querySelector('.view-tab[data-view="standin"]').classList.toggle('locked', !can('standin'));
   $('siLock').hidden = can('standin');
+  document.querySelector('.view-tab[data-view="setup"]').classList.toggle('locked', !can('setup'));
+  $('stLock').hidden = can('setup');
+  $('stRead').disabled = !can('setup');
   $('bundleLock').hidden = can('bundles') || mode !== 'bundle';
   const lim = license.limits || {};
   $('freeLimits').hidden = can('unlimited');

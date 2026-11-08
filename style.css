@@ -1688,3 +1688,85 @@ body.doc-page { background: var(--bg); color: var(--text); min-height: 100vh; di
 /* back from an unsubscribe link */
 .gx-notice { margin: 0 0 22px; padding: 10px 12px; border-left: 2px solid var(--gx-signal, #4fbf8b); background: rgba(79, 191, 139, 0.08); font-size: 13.5px; line-height: 1.5; }
 .gx-notice.bad { border-left-color: var(--gx-bad, #b3261e); background: rgba(179, 38, 30, 0.06); }
+
+/* ============ Switch setup: customize a transaction ============ */
+.st-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 24px 28px 32px; align-items: start; }
+.st-steps .si-step-head { cursor: default; }
+.st-steps .si-step.done .si-step-head { cursor: pointer; }
+.st-steps .si-step-body { margin-left: 30px; }
+.st-steps .table-wrap { margin-bottom: 12px; }
+.st-codes tr.st-pick { cursor: pointer; }
+.st-codes td.muted { white-space: normal; }
+.st-new { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
+.st-new .field { margin-bottom: 0; width: 160px; }
+.st-new .field:nth-child(2) { width: 260px; }
+.st-err { color: var(--bad); font-size: 12.5px; margin: 8px 0 0; }
+.st-err:empty { display: none; }
+.st-head { align-items: end; }
+.st-flow select { width: 100%; background: var(--input); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; }
+.st-cats { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 0 2px; }
+.st-life td, .st-charges td { vertical-align: middle; }
+.st-life td.muted { white-space: normal; font-family: var(--font); }
+.st-life .st-stage { font: 500 12.5px var(--font); display: block; }
+.st-life .sub { display: block; font-size: 11px; color: var(--muted); }
+.st-life select, .st-charges select { padding: 4px 6px; font-size: 12px; min-width: 170px; }
+.st-src { color: var(--ok); font-size: 9px; vertical-align: middle; }
+.st-in, .st-days-in { width: 110px !important; padding: 4px 8px !important; font-size: 12px; }
+.st-panels { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; margin-top: 4px; }
+.st-fee { display: grid; gap: 4px; }
+.st-chips { display: flex; flex-wrap: wrap; gap: 6px 14px; padding-top: 6px; }
+.st-kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0; font-size: 12.5px; }
+.st-kv dt { color: var(--muted); }
+.st-kv dd { margin: 0; }
+.st-sum { font: 400 17px/1.35 var(--serif); margin: 0 0 10px; }
+.st-sum .pill { font: 500 11px var(--font); vertical-align: middle; margin-left: 6px; }
+.st-review td.muted { white-space: normal; font-family: var(--font); }
+.st-notes { list-style: none; margin: 0 0 12px; padding: 0; }
+.st-notes li { font-size: 12.5px; line-height: 1.5; padding: 5px 10px; margin-bottom: 4px; border-left: 2px solid var(--border-strong); color: var(--text-2); }
+.st-notes li.bad { border-left-color: var(--bad); }
+.st-notes li.warn { border-left-color: var(--warn); }
+.st-more { margin: 4px 0 10px; font-size: 12.5px; }
+.st-more summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+.st-more ul, .st-more ol { margin: 6px 0 4px; padding-left: 20px; line-height: 1.55; }
+.st-pack-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.st-pack-head .st-sum { margin: 0; }
+.st-check { list-style: none; margin: 0 0 10px; padding: 0; border-top: 1px solid var(--border); }
+.st-check li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 2px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.st-files td.num { width: 60px; }
+.st-code { margin: 0; max-height: 440px; overflow: auto; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font: 11.5px/1.5 var(--mono); white-space: pre; }
+.st-tables { line-height: 1.7; margin-bottom: 12px; }
+.st-src-dlg { width: min(720px, 92vw); }
+.st-days-field select { width: auto; }
+@media (max-width: 860px) { .st-panels { grid-template-columns: 1fr; } .st-steps .si-step-body { margin-left: 0; } }
+.st-life td span.muted { font-family: var(--font); }
+.st-src-dlg .tbl td .sub { display: block; margin-top: 3px; font-family: var(--font); font-size: 11.5px; color: var(--muted); white-space: normal; }
+.st-grant { display: flex !important; align-items: center; gap: 8px; }
+.st-grant code { font-size: 11px; color: var(--text); }
+.st-nodb { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.st-nodb span { margin-right: auto; }
+.st-schema { max-width: 320px; }
+.st-up td { white-space: normal; }
+.st-up .actions { justify-content: flex-end; }
+
+/* Switch setup: business rules (WHEN a hook · IF conditions · THEN an action) */
+.st-rules { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
+.st-rules-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.st-rules-head .si-h { margin: 6px 0; min-width: 0; }
+.st-rules-head .btn { flex: none; white-space: nowrap; }
+.st-rule-list td { vertical-align: top; white-space: normal; }
+.st-rule-list td .sub { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); }
+.st-rule-btns { white-space: nowrap !important; text-align: right; }
+.st-rule-form { margin-top: 10px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); display: grid; gap: 10px; }
+.st-rule-form .field-row { margin: 0; }
+.st-cond { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; }
+.st-cond select { width: auto; min-width: 0; max-width: 100%; }
+.st-cond .st-in { width: 170px !important; }
+.st-code-in { width: 100%; font-size: 12px; line-height: 1.5; resize: vertical; tab-size: 2; }
+#ruNone { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#ruCondAdd { justify-self: start; width: auto; margin-top: 2px; }
+.st-rule-form > .field { display: grid; justify-items: start; gap: 2px; }
+.st-cond select:first-child { width: 210px; }
+.st-cond select:nth-child(2) { width: 160px; }
+.st-rule-form .field .st-in { width: 190px !important; }
+.st-rule-list td { font-family: var(--font); font-size: 12.5px; }
+.st-rule-list td.mono, .st-rule-list td .mono { font-family: var(--mono); }
