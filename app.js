@@ -4032,6 +4032,7 @@ function accTabs(tab) {
   document.querySelectorAll('[data-acc-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.accTab === tab)));
   document.querySelectorAll('[data-acc-pane]').forEach(p => { p.hidden = p.dataset.accPane !== tab; });
   if (tab === 'emails') EMAILS.load();
+  if (tab === 'referrals') REFERRALS.adminLoad();
 }
 
 function accRender() {
@@ -5345,4 +5346,93 @@ const EMAIL_PREF = (() => {
   $('gxNotice').className = 'gx-notice' + (ok ? '' : ' bad');
   $('gxNotice').hidden = false;
   toast(text, ok ? 'ok' : 'bad');
+})();
+
+// ---------- Referrals: your link and how it's doing; for admins, everyone's (Access -> Referrals) ----------
+const REFERRALS = (() => {
+  const sbase = () => AGENT.supabase && AGENT.supabase();
+  const longDay = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+  const STATUS = {
+    joined: ['neutral', 'Joined'], paid: ['warn', 'Paid'], rewarded: ['ok', 'Rewarded'], refunded: ['bad', 'Refunded'],
+    not_eligible: ['neutral', 'Referrer was paying'], capped: ['neutral', 'Over the 12-month cap'],
+    expired: ['neutral', 'Paid after 12 months'], revoked: ['bad', 'Revoked'],
+  };
+  let rows = [];
+
+  function msg(id, text, kind) { $(id).className = 'fb-msg ' + (kind || ''); $(id).textContent = text || ''; }
+
+  async function load() {
+    const sb = sbase();
+    if (!sb) return;
+    msg('refMsg', 'Loading…');
+    const { data, error } = await sb.rpc('my_referral');
+    if (error) { msg('refMsg', fbTableMissing(error) ? 'Referrals are not set up on this site yet.' : error.message, 'bad'); return; }
+    const r = (Array.isArray(data) ? data[0] : data) || {};
+    msg('refMsg', '');
+    $('refLink').value = r.code ? `${location.origin}/?ref=${r.code}` : '';
+    $('refJoined').textContent = r.joined ?? 0;
+    $('refUpgraded').textContent = r.upgraded ?? 0;
+    $('refMonths').textContent = r.months_year ?? 0;
+    const lines = [];
+    if (r.reward_ends) lines.push(['ok', `You have Team from referrals until ${longDay(r.reward_ends)}.`]);
+    if (r.pending) lines.push(['ok', `${r.pending === 1 ? 'A free month is' : r.pending + ' free months are'} on the way: the first is due ${longDay(r.next_reward)}, after the refund window.`]);
+    if (r.plan && r.plan !== 'free') lines.push(['', `You're on ${PLAN_NAMES[r.plan] || r.plan}. Rewards go to Free plans, so a month that falls due while you're on ${PLAN_NAMES[r.plan] || r.plan} isn't given.`]);
+    $('refStatus').innerHTML = lines.map(([k, t]) => `<p class="ref-status ${k}">${escapeHtml(t)}</p>`).join('');
+  }
+
+  async function adminLoad() {
+    const sb = sbase();
+    if (!sb) return;
+    $('refList').innerHTML = '<tr><td colspan="5" class="muted">Loading…</td></tr>';
+    const { data, error } = await sb.rpc('admin_referrals');
+    if (error) {
+      $('refList').innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(fbTableMissing(error) ? 'Referrals are not set up yet: run tools/supabase-licensing.sql in Supabase.' : error.message)}</td></tr>`;
+      return;
+    }
+    rows = data || [];
+    adminRender();
+  }
+
+  function adminRender() {
+    $('refCount').textContent = rows.filter(r => r.status === 'paid').length || '';
+    $('refList').innerHTML = rows.length ? rows.map(r => {
+      const [cls, label] = STATUS[r.status] || ['neutral', r.status];
+      const detail = r.status === 'paid' ? `${PLAN_NAMES[r.plan] || r.plan || ''} · reward ${dayOf(r.reward_due)}`
+        : r.status === 'rewarded' && r.reward_ends ? `Team ${dayOf(r.reward_starts)} to ${dayOf(r.reward_ends)}${r.granted_by === 'admin' ? ' (by you)' : ''}` : '';
+      const act = r.status === 'rewarded' ? '<button type="button" class="link-btn danger" data-ref="revoke">Revoke</button>'
+        : `<button type="button" class="link-btn" data-ref="grant">${r.status === 'paid' ? 'Grant now' : 'Grant'}</button>`;
+      return `<tr class="${['refunded', 'revoked', 'expired'].includes(r.status) ? 'row-muted' : ''}" data-id="${escapeHtml(r.referred_id)}">
+        <td>${escapeHtml(r.referrer_email || '')} <span class="muted">&rarr;</span> ${escapeHtml(r.referred_email || '')}</td>
+        <td class="mono">${escapeHtml(dayOf(r.joined_at))}</td>
+        <td>${stPill(cls, label)} <span class="muted">${escapeHtml(detail)}</span></td>
+        <td class="wrap">${escapeHtml(r.note || '')}</td>
+        <td class="acc-actions">${act}</td></tr>`;
+    }).join('') : '<tr><td colspan="5" class="muted">No referrals yet.</td></tr>';
+  }
+
+  async function adminAct(e) {
+    const b = e.target.closest('[data-ref]');
+    if (!b) return;
+    const tr = b.closest('tr'), r = rows.find(x => x.referred_id === tr.dataset.id);
+    if (!r) return;
+    const grant = b.dataset.ref === 'grant';
+    if (!confirm(grant ? `Give ${r.referrer_email} 30 days of Team for referring ${r.referred_email}?` : `Take back the free month ${r.referrer_email} got for referring ${r.referred_email}?`)) return;
+    b.disabled = true;
+    const { error } = await sbase().rpc(grant ? 'admin_referral_grant' : 'admin_referral_revoke', { p_referred: r.referred_id });
+    if (error) { accMsg(error.message, 'bad'); b.disabled = false; return; }
+    accMsg(grant ? 'Month given: they get the email with tomorrow\'s run' : 'Month taken back', 'ok');
+    adminLoad();
+  }
+
+  if (AGENT.hosted) $('refOpen').hidden = false;
+  $('refOpen').addEventListener('click', () => { $('refDlg').showModal(); load(); });
+  $('refClose').addEventListener('click', () => $('refDlg').close());
+  $('refCopy').addEventListener('click', async () => {
+    const link = $('refLink').value;
+    if (!link) return;
+    try { await navigator.clipboard.writeText(link); toast('Link copied: send it to a colleague', 'ok'); }
+    catch (e) { $('refLink').select(); toast('Copy is blocked here: the link is selected, press Ctrl+C', 'bad'); }
+  });
+  $('refList').addEventListener('click', adminAct);
+  return { load, adminLoad };
 })();

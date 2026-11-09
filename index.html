@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261108215619">
+<link rel="stylesheet" href="style.css?v=20261109132336">
 </head>
 <body>
 
@@ -73,6 +73,7 @@
       <button type="button" role="menuitem" class="acct-item" id="fbOpen" title="Request a feature or report a problem">Feedback<span class="fb-badge" id="fbBadge" hidden></span></button>
       <button type="button" role="menuitem" class="acct-item" id="vidOpen" title="Step-by-step videos on using SwitchProof">Videos</button>
       <button type="button" role="menuitem" class="acct-item" id="relOpen" title="What changed in each version">Releases<span class="acct-ver-tag" id="acctNewVer"></span></button>
+      <button type="button" role="menuitem" class="acct-item" id="refOpen" hidden title="Share your link: when a colleague buys a plan, you get a free month of Team">Refer a colleague</button>
       <button type="button" role="menuitemcheckbox" aria-checked="true" class="acct-item" id="emPrefItem" hidden title="Emails about new videos and releases">Update emails<span class="acct-ver-tag" id="emPrefState"></span></button>
       <button type="button" role="menuitem" class="acct-item" id="accessOpen" hidden title="Grant plans and make invite codes">Access<span class="fb-badge" id="accBadge" hidden></span></button>
       <button type="button" role="menuitem" class="acct-item acct-update" id="updateItem" hidden title="Download the installer: it closes SwitchProof, updates it and starts it again">Update SwitchProof<span class="fb-badge" id="updateBadge"></span></button>
@@ -1246,6 +1247,7 @@
     <button type="button" class="fb-tab" role="tab" data-acc-tab="sales" aria-selected="false">Sales<span class="tab-count" id="salesCount"></span></button>
     <button type="button" class="fb-tab" role="tab" data-acc-tab="codes" aria-selected="false">Invite codes</button>
     <button type="button" class="fb-tab" role="tab" data-acc-tab="redeemed" aria-selected="false">Redeemed</button>
+    <button type="button" class="fb-tab" role="tab" data-acc-tab="referrals" aria-selected="false">Referrals<span class="tab-count" id="refCount"></span></button>
     <button type="button" class="fb-tab" role="tab" data-acc-tab="types" aria-selected="false">Types<span class="tab-count" id="typesCount"></span></button>
     <button type="button" class="fb-tab" role="tab" data-acc-tab="emails" aria-selected="false">Emails</button>
   </div>
@@ -1300,6 +1302,11 @@
 
   <section data-acc-pane="redeemed" hidden>
     <div class="table-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Email</th><th>Redeemed</th><th>Plan ends</th><th></th></tr></thead><tbody id="redeemList"></tbody></table></div>
+  </section>
+
+  <section data-acc-pane="referrals" hidden>
+    <p class="plan-sub">Accounts that signed up from a referral link. The referrer gets 30 days of Team 14 days after the account first pays, if they're on Free and it wasn't refunded. Grant gives the month now, for example after an invoiced deal.</p>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>Referrer &rarr; referred</th><th>Joined</th><th>Status</th><th>Note</th><th></th></tr></thead><tbody id="refList"></tbody></table></div>
   </section>
 
   <section data-acc-pane="types" hidden>
@@ -1470,6 +1477,29 @@
   </form>
 </dialog>
 
+<dialog class="fb-dlg ref-dlg" id="refDlg" aria-labelledby="refTitle">
+  <div class="dlg-head">
+    <div>
+      <p class="fb-eyebrow">Earn Team</p>
+      <h2 id="refTitle">Refer a colleague</h2>
+    </div>
+    <button type="button" class="t-btn" id="refClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <p class="plan-sub">When someone you refer buys Team or Enterprise, you get 30 days of Team.</p>
+  <div class="ref-link">
+    <input type="text" id="refLink" class="mono" readonly aria-label="Your referral link" value="">
+    <button type="button" class="btn primary" id="refCopy">Copy link</button>
+  </div>
+  <div class="ref-stats">
+    <div><span>Joined</span><b id="refJoined">&ndash;</b></div>
+    <div><span>Upgraded</span><b id="refUpgraded">&ndash;</b></div>
+    <div><span>Months earned</span><b id="refMonths">&ndash;</b><em>of 12 this year</em></div>
+  </div>
+  <div id="refStatus"></div>
+  <p class="fb-msg" id="refMsg"></p>
+  <p class="ref-small">Counts new accounts that sign up from your link and pay within 12 months. Rewards go to Free plans, after the 14-day refund window, up to 12 months a year. <a href="terms.html#referrals" target="_blank" rel="noopener">Referral terms</a></p>
+</dialog>
+
 <dialog class="fb-dlg rel-dlg" id="relDlg" aria-labelledby="relTitle">
   <div class="dlg-head">
     <div>
@@ -1630,8 +1660,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20261108215619"></script>
-<script src="agent.js?v=20261108215619"></script>
-<script src="app.js?v=20261108215619"></script>
+<script src="config.js?v=20261109132336"></script>
+<script src="agent.js?v=20261109132336"></script>
+<script src="app.js?v=20261109132336"></script>
 </body>
 </html>

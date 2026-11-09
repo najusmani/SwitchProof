@@ -1770,3 +1770,17 @@ body.doc-page { background: var(--bg); color: var(--text); min-height: 100vh; di
 .st-rule-form .field .st-in { width: 190px !important; }
 .st-rule-list td { font-family: var(--font); font-size: 12.5px; }
 .st-rule-list td.mono, .st-rule-list td .mono { font-family: var(--mono); }
+
+/* Refer a colleague */
+.ref-dlg { width: min(560px, calc(100vw - 32px)); }
+.ref-link { display: flex; gap: 8px; margin: 14px 0; }
+.ref-link input { flex: 1; min-width: 0; }
+.ref-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0 0 12px; }
+.ref-stats div { background: var(--surface-2); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.ref-stats span { font: 500 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.ref-stats b { font: 500 22px var(--font); color: var(--text); }
+.ref-stats em { font-style: normal; font-size: 12px; color: var(--muted); }
+.ref-status { margin: 0 0 8px; padding: 8px 12px; border-radius: var(--radius); background: var(--surface-2); font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.ref-status.ok { background: var(--ok-soft); color: var(--ok); }
+.ref-small { margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+@media (max-width: 520px) { .ref-stats { grid-template-columns: 1fr; } .ref-link { flex-direction: column; } }

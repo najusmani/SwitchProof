@@ -32,6 +32,30 @@ const AGENT = (() => {
     history.replaceState(null, '', location.pathname + location.search);
   }
 
+  // A referral link (?ref=CODE): remembered for 30 days, the first link opened wins. It goes with a new
+  // account's sign-up and is claimed once that account is signed in (claim_referral links it only once).
+  const REF_RE = /^[A-HJ-NP-Z2-9]{6}$/;
+  const REF_DAYS = 30;
+  const refStore = {
+    get() {
+      try {
+        const v = JSON.parse(localStorage.getItem('ss.ref') || 'null');
+        return v && REF_RE.test(v.code) && Date.now() - v.at < REF_DAYS * 86400e3 ? v.code : null;
+      } catch (e) { return null; }
+    },
+    set(code) { try { localStorage.setItem('ss.ref', JSON.stringify({ code, at: Date.now() })); } catch (e) { /* storage unavailable */ } },
+    clear() { try { localStorage.removeItem('ss.ref'); } catch (e) { /* storage unavailable */ } },
+  };
+  {
+    const q = new URLSearchParams(location.search);
+    const ref = (q.get('ref') || '').trim().toUpperCase();
+    if (q.has('ref')) {
+      if (REF_RE.test(ref) && !refStore.get()) refStore.set(ref);
+      q.delete('ref');
+      history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+    }
+  }
+
   const base = () => (hosted ? (ls.get('url') || cfg.agentUrl || 'http://127.0.0.1:8787').replace(/\/+$/, '') : '');
   const token = () => ls.get('token') || '';
 
@@ -119,6 +143,22 @@ const AGENT = (() => {
     return false;
   }
 
+  /** Signed in and came from a referral link: link the account to the referrer (quietly; tried again next time on errors). */
+  async function claimReferral() {
+    try {
+      const { data } = await sb.auth.getUser();
+      const user = data && data.user;
+      if (!user) return;
+      const code = refStore.get() || ((user.user_metadata || {}).ref || '').toUpperCase() || null;
+      const done = 'ss.ref.done.' + user.id;
+      if (!code || localStorage.getItem(done)) return;
+      const { error } = await sb.rpc('claim_referral', { p_code: code });
+      if (error) return;   // not set up on the site yet, or offline
+      refStore.clear();
+      localStorage.setItem(done, '1');
+    } catch (e) { /* never in the way of signing in */ }
+  }
+
   function loadScript(src) {
     return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = fail; document.head.appendChild(s); });
   }
@@ -146,6 +186,7 @@ const AGENT = (() => {
       }
       return;
     }
+    claimReferral();
     if (emailLink.recovery) { showReset(data.session.user); return; }
     await connect();
   }
@@ -172,12 +213,15 @@ const AGENT = (() => {
       const email = $g('glEmail').value.trim(), password = $g('glPass').value;
       msg('glMsg', signUp ? 'Creating account…' : 'Signing in…');
       // Confirmation emails return to this exact page (must be listed under Supabase > Auth > Redirect URLs).
+      // A referral code travels with the new account too, so it still counts if the email is confirmed in another browser.
+      const ref = refStore.get();
       const fn = signUp
-        ? sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } })
+        ? sb.auth.signUp({ email, password, options: Object.assign({ emailRedirectTo: location.origin + location.pathname }, ref ? { data: { ref } } : {}) })
         : sb.auth.signInWithPassword({ email, password });
       const { data, error } = await fn;
       if (error) { msg('glMsg', error.message, 'bad'); return; }
       if (signUp && !data.session) { msg('glMsg', 'Check your email to confirm the account, then sign in.', 'ok'); return; }
+      claimReferral();
       await connect();
     });
     $g('glForgot').addEventListener('click', async () => {
