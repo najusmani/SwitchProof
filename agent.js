@@ -26,6 +26,7 @@ const AGENT = (() => {
 
   // The agent opens the site with #agent=...&pair=...; keep them and clear the address bar.
   const hash = new URLSearchParams(location.hash.slice(1));
+  const pairedNow = !!hash.get('pair');   // SwitchProof itself just opened this page: it is running on this PC
   if (hash.get('pair')) {
     ls.set('token', hash.get('pair'));
     if (hash.get('agent')) ls.set('url', hash.get('agent'));
@@ -61,11 +62,44 @@ const AGENT = (() => {
 
   function url(path) { return base() + path; }
 
+  // ---------- a website reaching a program on the same PC ----------
+  // To the browser, this page (public) calling the agent (127.0.0.1) is "local network access". Chrome and Edge
+  // ask the user once (permission 'loopback-network'); a browser managed by an organisation can refuse it.
+  const loopback = () => /^https?:\/\/(127(?:\.\d{1,3}){3}|localhost|\[::1\])(?::\d+)?$/i.test(base());
+
+  // Every request says where it is going (targetAddressSpace), as the browser expects for this kind of call.
+  // Browsers that don't know the option ignore it; an older Chrome knows it with other values and would throw,
+  // so it is tried once on a Request that is never sent.
+  let spaceOption = null;
+  function loopbackOption() {
+    if (spaceOption === null) {
+      try { new Request('http://127.0.0.1/', { targetAddressSpace: 'loopback' }); spaceOption = true; } catch (e) { spaceOption = false; }
+    }
+    return spaceOption;
+  }
+
   /** fetch() against the agent, with the pairing code when hosted. */
   function apiFetch(path, opts) {
     opts = Object.assign({}, opts || {});
-    if (hosted) opts.headers = Object.assign({}, opts.headers || {}, { 'X-Agent-Token': token() });
+    if (hosted) {
+      opts.headers = Object.assign({}, opts.headers || {}, { 'X-Agent-Token': token() });
+      if (loopback() && loopbackOption()) opts.targetAddressSpace = 'loopback';
+    }
     return fetch(url(path), opts);
+  }
+
+  /**
+   * What the browser says about this page reaching the agent: 'granted', 'prompt' (it will ask on the first
+   * request), 'denied', or 'unknown' when the browser has no such permission to ask about.
+   * Only 'loopback-network' is queried: the older name 'local-network-access' crashes some Chrome versions.
+   */
+  async function reachState() {
+    if (!hosted || !loopback() || !navigator.permissions || !navigator.permissions.query) return 'unknown';
+    try {
+      return (await navigator.permissions.query({ name: 'loopback-network' })).state;
+    } catch (e) {
+      return 'unknown';
+    }
   }
 
   /** href for links opened in a new tab (reports, CSV) -- those can't carry a header. */
@@ -93,7 +127,7 @@ const AGENT = (() => {
       if (res.ok && d.agent) return { ok: true, info: d };
       return { ok: false, why: d.error || 'Agent refused the request' };
     } catch (e) {
-      return { ok: false, why: 'No agent answering at ' + base() + '. Is SwitchProof running (open it from the Start menu; its small window should be open)? If the browser asked about local network access, allow it and press Connect.' };
+      return { ok: false, why: 'No agent answering at ' + base() + '. Is SwitchProof running? Open it from the Start menu: its small window should be open.' };
     }
   }
 
@@ -123,11 +157,43 @@ const AGENT = (() => {
     }, 5000);
   }
 
-  async function connect() {
+  /**
+   * The connect screen, with the box that speaks for the browser's permission:
+   *   ask      the browser will ask its question on the first request: explain, and let a click start it
+   *   blocked  the browser refuses: how to allow it
+   *   retry    it worked before on this browser, but SwitchProof isn't answering now
+   *   ''       no box (a new user who hasn't installed SwitchProof yet reads the steps below)
+   */
+  function showConnect(box, why) {
+    show('connect');
+    $g('gcUrl').value = base();
+    $g('gcCode').value = token();
+    $g('gcAllow').hidden = !box;
+    $g('gcAllow').dataset.state = box;
+    $g('gcAsk').hidden = box !== 'ask';
+    $g('gcBlocked').hidden = box !== 'blocked';
+    $g('gcRetry').hidden = box !== 'retry';
+    $g('gcAllowBtn').textContent = box === 'blocked' ? 'Check again' : box === 'retry' ? 'Try again' : 'Connect';
+    $g('gcSite').textContent = location.host;
+    // Opened by SwitchProof itself: it is installed and running, so the download steps are left out.
+    document.querySelector('.gate-step[data-step="connect"]').classList.toggle('paired', pairedNow && !!box);
+    msg('gcMsg', why || '', why ? 'bad' : '');
+  }
+
+  /** byUser: started by a click. The first request to the agent is never sent without one (see 'ask' above). */
+  async function connect(byUser) {
+    const reach = await reachState();
+    const known = pairedNow || !!token();   // this browser has been paired with a SwitchProof (else: a new user, who reads the steps)
+    // Asked out of nowhere, people choose Block. So the first time, this page explains and waits for a click;
+    // once the browser has allowed it (or, where the browser can't say, once it has worked) it connects by itself.
+    const firstTime = reach === 'prompt' || (reach === 'unknown' && hosted && loopback() && !ls.get('reached'));
+    if (!byUser && reach === 'denied') { showConnect('blocked', ''); return false; }
+    if (!byUser && firstTime) { showConnect(known ? 'ask' : '', ''); return false; }
     msg('gcMsg', 'Checking ' + base() + ' …');
     const r = await probe();
     if (r.ok && outdated(r.info)) { showUpdate(r.info); return false; }
     if (r.ok) {
+      ls.set('reached', '1');
       if (updateTimer) { clearInterval(updateTimer); updateTimer = null; }
       $g('gate').hidden = true;
       document.body.classList.add('agent-ok');
@@ -136,10 +202,10 @@ const AGENT = (() => {
       resolveReady(r.info);
       return true;
     }
-    show('connect');
-    $g('gcUrl').value = base();
-    $g('gcCode').value = token();
-    msg('gcMsg', r.why, 'bad');
+    const now = await reachState();   // the answer the user just gave the browser, if it asked
+    if (now === 'denied') showConnect('blocked', byUser && reach === 'denied' ? 'Still blocked. Follow the steps above, then press Check again.' : '');
+    else if (now === 'prompt') showConnect('ask', 'Not connected. If your browser asked, choose Allow. And is SwitchProof running?');
+    else showConnect(known || byUser ? 'retry' : '', r.why);
     return false;
   }
 
@@ -268,8 +334,9 @@ const AGENT = (() => {
       e.preventDefault();
       ls.set('url', $g('gcUrl').value.trim() || null);
       ls.set('token', $g('gcCode').value.trim() || null);
-      await connect();
+      await connect(true);
     });
+    $g('gcAllowBtn').addEventListener('click', () => connect(true));
     document.querySelectorAll('[data-signout]').forEach(b => b.addEventListener('click', async () => {
       try { await apiFetch('/api/license', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: null }) }); } catch (e) { /* agent not reachable */ }
       if (sb) await sb.auth.signOut();

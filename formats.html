@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Message formats · SwitchProof</title>
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="description" content="How to describe your switch's ISO 8583 message format in SwitchProof: field kinds, packed numbers, EBCDIC, bitmaps, length headers, and checking a format against a real message.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=20261111230940">
+<script>try { var t = JSON.parse(localStorage.getItem('ss.theme')); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
+</head>
+<body class="doc-page">
+
+<header class="doc-top"><div class="doc-top-in">
+  <a class="doc-brand" href="./"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="2"/><path d="M6 15.5l3.5-6 3 4.5 2.2-3.2L18 15.5"/></svg>SwitchProof</a>
+  <nav class="doc-nav" aria-label="SwitchProof">
+    <a href="formats.html" aria-current="page">Formats</a><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a><a href="./">Sign in</a>
+  </nav>
+</div></header>
+
+<main class="doc">
+  <h1>Message formats</h1>
+  <p class="doc-meta">How SwitchProof writes and reads your switch's messages</p>
+
+  <p class="doc-lead">Every switch speaks ISO 8583, but each writes it its own way: plain text or packed digits, ASCII or EBCDIC, a two-byte or four-digit length in front. A <b>message format</b> tells SwitchProof how your switch does it. Get it right once, and every test uses it.</p>
+
+  <div class="doc-box">
+    <p><b>Start with a real message.</b> Ask for one request from your switch's trace or log, as hex. With it you can check a format before anything is sent: SwitchProof reads it field by field and shows where it stops.</p>
+  </div>
+
+  <h2 id="built-in">The built-in formats</h2>
+  <table class="doc-tbl">
+    <thead><tr><th>Format</th><th>For</th></tr></thead>
+    <tbody>
+      <tr><td>FLEXCUBE</td><td>The Oracle FLEXCUBE ATM/POS switch interface (ISO 8583:1987). Checked byte for byte against the FLEXCUBE switch and used on bank UAT.</td></tr>
+      <tr><td>ISO 1987</td><td>The 1987 standard dictionary. Every field that is set is sent.</td></tr>
+      <tr><td>ISO 1993</td><td>The 1993 standard: message types 1xxx, function codes, 3-digit action codes.</td></tr>
+      <tr><td>ISO 2003</td><td>Message types 2xxx on the 1993 field layout.</td></tr>
+    </tbody>
+  </table>
+  <p>All four write plain text with a binary bitmap. If your switch does too and its fields match, pick one for your target and you're done.</p>
+
+  <h2 id="steps">Making your own format</h2>
+  <p>In the console, open <b>Target</b> (top right), then <b>New format</b> under the format list.</p>
+  <ol>
+    <li><b>Start from</b> the built-in format closest to your switch, and give it a name.</li>
+    <li><b>How your switch writes messages</b>: the settings below. Leave a setting alone if you're not sure.</li>
+    <li><b>Check with a message from your switch</b>: paste the hex. Each field shows what it reads as. Where reading stops, the field is marked with the reason and other formats to try. Change formats until every field reads, then <b>Save format</b>.</li>
+  </ol>
+  <p><b>See what SwitchProof sends</b> shows a sample balance inquiry in your format, part by part, to hold against your switch's specification. Nothing is sent to a switch from this dialog. Saving your own formats is part of the Team plan.</p>
+
+  <h2 id="wire">How your switch writes messages</h2>
+  <table class="doc-tbl">
+    <thead><tr><th>Setting</th><th>Choices</th><th>What it means</th></tr></thead>
+    <tbody>
+      <tr><td>Text</td><td>ASCII, EBCDIC</td><td>The character set of text fields. EBCDIC is used by mainframe hosts; code pages cp037 (default), cp500 and cp1047 are under More settings.</td></tr>
+      <tr><td>Numbers</td><td>Text, Packed</td><td>Numeric fields as one character per digit, or two digits per byte (BCD). <code>12345</code> packed is <code>01 23 45</code>.</td></tr>
+      <tr><td>Field lengths</td><td>Text, Packed, Binary</td><td>The length in front of a variable field. A card number of 16 digits: text <code>3136</code>, packed <code>16</code>, binary <code>10</code>.</td></tr>
+      <tr><td>Bitmap</td><td>Binary, Hex</td><td>8 bytes for each half of the bitmap, or 16 hex characters.</td></tr>
+      <tr><td>Message length</td><td>2 bytes, 4 digits, Packed, 4 bytes</td><td>The length sent in front of every message. Most switches use 2 bytes.</td></tr>
+      <tr><td>Header</td><td>hex, or <code>text:</code> and characters</td><td>Bytes your switch expects before the message type, such as a TPDU <code>6000030000</code>, or <code>text:ISO016000010</code>.</td></tr>
+    </tbody>
+  </table>
+  <h3>More settings</h3>
+  <table class="doc-tbl">
+    <tbody>
+      <tr><td>Message type</td><td>4 characters, or packed into 2 bytes.</td></tr>
+      <tr><td>Odd packed digits</td><td>An odd number of digits gets a leading 0 (most switches) or a trailing F. Track data always gets a trailing F.</td></tr>
+      <tr><td>Reply header to skip</td><td>Bytes in front of the reply's message type that SwitchProof ignores.</td></tr>
+      <tr><td>Trailer</td><td>Hex sent after the message, such as <code>03</code>.</td></tr>
+      <tr><td>Length counts itself</td><td>The message length includes its own bytes.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="fields">Field formats</h2>
+  <p>A field's format is its kind and its length, such as <code>LL:19</code>. In the check table you can type a new one over any field.</p>
+  <table class="doc-tbl">
+    <thead><tr><th>Kind</th><th>Is</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td><code>N</code></td><td>Fixed digits, padded with zeros on the left</td><td>F3 <code>N:6</code></td></tr>
+      <tr><td><code>AN</code></td><td>Fixed text, padded with spaces on the right</td><td>F41 <code>AN:8</code></td></tr>
+      <tr><td><code>AMT</code></td><td>C or D, then digits</td><td>F28 <code>AMT:9</code></td></tr>
+      <tr><td><code>LL</code> <code>LLL</code> <code>LLLL</code></td><td>Variable text with a 2, 3 or 4 digit length</td><td>F48 <code>LLL:999</code></td></tr>
+      <tr><td><code>LLN</code> <code>LLLN</code></td><td>Variable digits: packed when the format packs numbers</td><td>F2 <code>LLN:19</code></td></tr>
+      <tr><td><code>LLZ</code> <code>LLLZ</code></td><td>Track data, digits and <code>=</code>: packed with <code>D</code> for <code>=</code></td><td>F35 <code>LLZ:37</code></td></tr>
+      <tr><td><code>B</code></td><td>Fixed binary, length in bytes</td><td>F52 <code>B:8</code></td></tr>
+      <tr><td><code>LLB</code> <code>LLLB</code></td><td>Variable binary, length in bytes</td><td>F55 <code>LLLB:255</code></td></tr>
+    </tbody>
+  </table>
+  <p>One field can differ from the rest of the format: <code>N:12:text</code> keeps an amount as text in a format that packs numbers, <code>N:12:bcd</code> packs it in one that doesn't, and <code>:left</code> or <code>:right</code> sets where an odd number of packed digits is padded.</p>
+  <p>Chip data (F55) is shown as its EMV tags when the message is checked.</p>
+
+  <h2 id="reading">When a message doesn't read</h2>
+  <ul>
+    <li><b>A text field shows odd characters</b> (marked amber): it is probably packed or binary on your switch. Try <code>LLN</code> for digits, <code>LLZ</code> for track data.</li>
+    <li><b>"Length is not a number"</b> on a field: the field before it is usually a different size, so reading started in the wrong place. Try the formats offered for both.</li>
+    <li><b>"Cut short"</b>: a field is longer in the format than in the message, or the numbers aren't packed the same way.</li>
+    <li><b>Bytes left after the last field</b>: a field is shorter in the format than on your switch.</li>
+    <li><b>The bitmap lists fields the format doesn't know</b>: add them with a kind and length.</li>
+  </ul>
+  <p>Fix the first marked field first: the ones after it are read from wherever it ended.</p>
+
+  <h2 id="file">Formats as files</h2>
+  <p>Each format you save is a file in the <code>profiles</code> folder of SwitchProof's data folder (<code>%USERPROFILE%\SwitchProof\profiles</code>), so it can be copied to another PC. A file with a mistake is named under the format list with what is wrong.</p>
+  <pre class="doc-code">{
+  "id": "bank-x",
+  "name": "Bank X switch",
+  "base": "iso-87",
+  "wire": { "numbers": "bcd", "lengths": "bcd", "lengthHeader": "binary2", "header": "6000030000" },
+  "fields": { "2": "LLN:19", "35": "LLZ:37", "48": "LLL:999" },
+  "messages": { "0200": "2 3 4 7 11 12 13 22 25 35 37 41 42 49 52" },
+  "approved": ["00"],
+  "procCodes": { "REFUND": "200000" }
+}</pre>
+  <p><code>messages</code> limits a message type to the fields listed; without it, every field that is set is sent. <code>approved</code> lists the response codes that mean approved. <code>procCodes</code> sets your switch's processing code for a transaction type.</p>
+
+  <h2>Help</h2>
+  <p>Stuck on a format? Send the hex of one message, with card numbers replaced, to <a href="mailto:support@switchproof.online">support@switchproof.online</a>.</p>
+</main>
+
+<footer class="doc-foot"><div class="doc-foot-in">
+  <span>SwitchProof is a product of <a href="https://trustroutetechnologies.com" rel="noopener">TrustRoute Technologies</a>, Burnaby, British Columbia, Canada · <a href="mailto:support@switchproof.online">support@switchproof.online</a></span>
+  <a href="formats.html">Formats</a><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a>
+</div></footer>
+</body>
+</html>

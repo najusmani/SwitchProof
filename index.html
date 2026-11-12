@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261109132336">
+<link rel="stylesheet" href="style.css?v=20261111230940">
 </head>
 <body>
 
@@ -25,6 +25,7 @@
     <button type="button" role="tab" class="view-tab" data-view="uat" aria-selected="false">UAT</button>
     <button type="button" role="tab" class="view-tab" data-view="standin" aria-selected="false" title="Rehearse a core banking cutover: stand-in, release the queue, reconcile (Enterprise)">Stand-in</button>
     <button type="button" role="tab" class="view-tab" data-view="setup" aria-selected="false" title="How the FLEXCUBE switch interface is set up for each processing code, and change packs (Enterprise)">Switch setup</button>
+    <button type="button" role="tab" class="view-tab" data-view="sim" aria-selected="false" title="SwitchProof answers as a switch or issuer, for testing an ATM, a POS or a switch's own link (Team)">Simulator</button>
   </nav>
 
   <div class="target-wrap">
@@ -51,6 +52,11 @@
           <label class="field"><span>Port</span><input type="number" id="tfPort" placeholder="2100" min="1" max="65535" required></label>
         </div>
         <label class="field"><span>Message format <em>ISO 8583 version and field layout the switch speaks</em></span><select id="tfProfile"></select></label>
+        <div class="tf-format">
+          <button type="button" class="link-btn" id="fmtNew" hidden>New format</button>
+          <button type="button" class="link-btn" id="fmtEdit" hidden>Change this format</button>
+          <span class="tf-msg warn-t" id="fmtBroken" hidden></span>
+        </div>
         <div class="tf-actions">
           <span class="tf-msg" id="tfMsg"></span>
           <button type="button" class="btn sm ghost-plain" id="tfTest">Test</button>
@@ -185,17 +191,21 @@
         <span class="tps" id="tpsHint">≈ 2 tx/s</span>
         <span class="plan-hint" id="freeLimits" hidden></span>
       </div>
-      <div class="field-row three">
+      <div class="field-row four">
         <label class="field">
           <span>Executions</span>
           <input type="number" id="count" value="10" min="1">
         </label>
         <label class="field">
           <span>Over (seconds)</span>
-          <input type="number" id="duration" value="5" min="0" step="0.1">
+          <input type="number" id="duration" value="5" min="0" step="1">
         </label>
-        <label class="field">
-          <span>Concurrency</span>
+        <label class="field" title="The rate climbs from zero to full over this many seconds, then holds. 0 = full rate from the first message.">
+          <span>Ramp-up (seconds)</span>
+          <input type="number" id="rampSeconds" value="0" min="0" step="1">
+        </label>
+        <label class="field" title="How many messages wait for their reply at the same moment. Each one is a connection to the switch.">
+          <span>At once</span>
           <input type="number" id="concurrency" value="20" min="1">
         </label>
       </div>
@@ -227,6 +237,69 @@
       <div class="field-row two">
         <label class="field"><span>Card number (PAN)</span><input type="text" id="pan" value="4000000000000002" class="mono"></label>
         <label class="field"><span>Remote acquirer <em>UAT remote on-us steps</em></span><input type="text" id="remoteAcquirer" value="" class="mono" placeholder="not set"></label>
+      </div>
+      <label class="field" title="Without the bank database: SwitchProof sends a balance inquiry for the account before and after each UAT step that moves money, and checks the change. Two extra messages per account, per step. Not used when a bank database is set up for this target.">
+        <span>Check balances in UAT runs <em>by balance inquiry, when there is no bank database</em></span>
+        <select id="balanceCheck">
+          <option value="off">Don't check</option>
+          <option value="report">Check, and report differences</option>
+          <option value="enforce">Check, and fail the step on a difference</option>
+        </select>
+      </label>
+      <div class="conn-box">
+        <div><b>Connection to the switch</b> <span class="hint">saved per target</span></div>
+        <div class="field-row three">
+          <label class="field" title="A connection per message: opened, used once, closed. Kept open: messages share connections that stay open, as an acquirer's link does; replies are matched by trace number.">
+            <span>Connections</span>
+            <select id="connection"><option value="each">One per message</option><option value="keep">Kept open</option></select>
+          </label>
+          <label class="field"><span>How many <em>when kept open</em></span><input type="number" id="links" min="1" max="50" step="1" placeholder="1"></label>
+          <label class="field" title="An echo test (0800) on a kept-open connection that has been quiet this long. A connection whose echo gets no answer is closed and opened again. Blank or 0: no echo."><span>Echo test <em>seconds quiet</em></span><input type="number" id="echoSeconds" min="0" max="3600" step="1" placeholder="off"></label>
+        </div>
+        <div class="field-row two">
+          <label class="field"><span>TLS</span><select id="tls"><option value="off">Off: plain TCP</option><option value="on">On</option></select></label>
+          <label class="field" title="For a switch with its own (self-signed) certificate: its SHA-256 fingerprint. The Test button shows it. Blank: the certificate must be trusted by this PC and name the switch's address."><span>Certificate fingerprint <em>SHA-256; blank = this PC's trust</em></span><input type="text" id="tlsPin" class="mono" spellcheck="false" autocapitalize="none" autocorrect="off" placeholder="AB:CD:…"></label>
+        </div>
+      </div>
+      <div class="conn-box sec-box" id="secBox" hidden>
+        <div><b>Security</b> <span class="hint">test keys only · saved per target</span></div>
+        <div class="sec-row">
+          <label class="fmt-check"><input type="checkbox" id="secPinOn"><span>Send a PIN</span></label>
+          <div class="sec-body" id="secPinBody" hidden>
+            <div class="field-row two">
+              <label class="field"><span>Test PIN</span><input type="text" id="pin" class="mono" inputmode="numeric" maxlength="12" placeholder="1234"></label>
+              <label class="field"><span>Block format</span><select id="pinFormat"><option value="0">ISO 0</option><option value="1">ISO 1</option><option value="3">ISO 3</option></select></label>
+            </div>
+          <div class="sec-key" id="secPinKey">
+            <span class="sec-have" id="secPinHave" hidden><span class="pill code ok" id="secPinKcv" title="Key check value: compare it with the switch's"></span> <span id="secPinState"></span>
+              <button type="button" class="link-btn" id="secPinChange">Change</button> <button type="button" class="link-btn danger" id="secPinRemove">Remove</button></span>
+            <span class="sec-new" id="secPinNew">
+              <label class="field"><span>PIN key <em>16, 32 or 48 hex digits</em></span><input type="password" id="secPinInput" class="mono" autocomplete="off" spellcheck="false" placeholder="Paste the test key"></label>
+              <button type="button" class="btn sm" id="secPinSave">Save key</button>
+            </span>
+          </div>
+          </div>
+        </div>
+        <div class="sec-row">
+          <label class="fmt-check"><input type="checkbox" id="secChipOn"><span>Send chip data <em>field 55</em></span></label>
+          <input type="hidden" id="chip" value="off">
+        </div>
+        <div class="sec-row">
+          <label class="fmt-check"><input type="checkbox" id="secMacOn"><span>Sign messages <em>MAC, field 64 or 128</em></span></label>
+          <input type="hidden" id="mac" value="off">
+          <div class="sec-body" id="secMacBody" hidden>
+            <label class="field"><span>Method</span><select id="secMacAlg"><option value="x919">X9.19 retail MAC</option><option value="x99">X9.9 single DES</option><option value="cbc3">Triple-DES CBC</option></select></label>
+          <div class="sec-key" id="secMacKey">
+            <span class="sec-have" id="secMacHave" hidden><span class="pill code ok" id="secMacKcv" title="Key check value: compare it with the switch's"></span> <span id="secMacState"></span>
+              <button type="button" class="link-btn" id="secMacChange">Change</button> <button type="button" class="link-btn danger" id="secMacRemove">Remove</button></span>
+            <span class="sec-new" id="secMacNew">
+              <label class="field"><span>MAC key <em>16, 32 or 48 hex digits</em></span><input type="password" id="secMacInput" class="mono" autocomplete="off" spellcheck="false" placeholder="Paste the test key"></label>
+              <button type="button" class="btn sm" id="secMacSave">Save key</button>
+            </span>
+          </div>
+          </div>
+        </div>
+        <p class="fb-msg" id="secMsg" role="status"></p>
       </div>
       <label class="field">
         <span>Rotate PANs <em>optional · one per line, overrides the card above</em></span>
@@ -271,9 +344,15 @@
         <div class="kpi ok"><span class="kpi-val" id="stApproved">0</span><span class="kpi-label">Approved</span></div>
         <div class="kpi bad"><span class="kpi-val" id="stDeclined">0</span><span class="kpi-label">Declined</span></div>
         <div class="kpi warn"><span class="kpi-val" id="stErrors">0</span><span class="kpi-label">Errors</span></div>
-        <div class="kpi"><span class="kpi-val" id="stThroughput">0</span><span class="kpi-label">Tx / sec</span></div>
-        <div class="kpi"><span class="kpi-val" id="stAvgLatency">0</span><span class="kpi-label">Avg ms</span></div>
-        <div class="kpi"><span class="kpi-val" id="stMinMax">0 / 0</span><span class="kpi-label">Min / max ms</span></div>
+        <div class="kpi"><span class="kpi-val" id="stThroughput">0</span><span class="kpi-label">Per second</span></div>
+        <div class="kpi" title="Half of the answers came within this time (request to reply)."><span class="kpi-val"><span id="stP50">0</span><small> ms</small></span><span class="kpi-label">Half within</span></div>
+        <div class="kpi" title="95 of every 100 answers came within this time."><span class="kpi-val"><span id="stP95">0</span><small> ms</small></span><span class="kpi-label">95% within</span></div>
+        <div class="kpi" title="99 of every 100 answers came within this time."><span class="kpi-val"><span id="stP99">0</span><small> ms</small></span><span class="kpi-label">99% within</span></div>
+        <div class="kpi" title="The slowest answer of the run."><span class="kpi-val"><span id="stMax">0</span><small> ms</small></span><span class="kpi-label">Slowest</span></div>
+      </div>
+      <div class="pace-note" id="paceNote" role="status" hidden>
+        <span id="paceText"></span>
+        <button type="button" class="btn sm" id="paceFix"></button>
       </div>
     </div>
 
@@ -284,7 +363,7 @@
       </div>
       <div class="table-wrap">
         <table class="tbl kind-tbl">
-          <thead><tr><th>Type</th><th class="num">Share</th><th class="num">Sent</th><th class="num">Approved</th><th class="num">Declined</th><th class="num">Errors</th><th class="num">Avg ms</th></tr></thead>
+          <thead><tr><th>Type</th><th class="num">Share</th><th class="num">Sent</th><th class="num">Approved</th><th class="num">Declined</th><th class="num">Errors</th><th class="num">Avg ms</th><th class="num">95% ms</th></tr></thead>
           <tbody id="kindBody"></tbody>
         </table>
       </div>
@@ -294,8 +373,8 @@
       <div class="card-head">
         <h2>Throughput &amp; latency</h2>
         <div class="legend">
-          <span><i class="lg lg-tps"></i>Tx / sec</span>
-          <span><i class="lg lg-lat"></i>Avg ms</span>
+          <span><i class="lg lg-tps"></i>Sent per second</span>
+          <span><i class="lg lg-lat"></i>Answer time, ms</span>
         </div>
       </div>
       <div class="chart-wrap"><canvas id="chart"></canvas><div class="chart-empty" id="chartEmpty">Live chart appears while a test runs</div></div>
@@ -581,6 +660,91 @@
       <thead><tr><th>Rehearsal</th><th>Target</th><th>Started</th><th>Reached</th><th class="num">Advices</th><th class="num">Release took</th><th>Result</th><th></th></tr></thead>
       <tbody id="siHistory"><tr><td colspan="8" class="muted">No rehearsals yet.</td></tr></tbody>
     </table></div>
+  </section>
+</main>
+</div>
+
+<div id="viewSim" hidden>
+<main class="sim-layout">
+  <section class="card">
+    <div class="card-head"><h2>Simulator</h2><span class="summary-hint">SwitchProof answers as the switch or issuer</span></div>
+    <form id="simForm" autocomplete="off" novalidate>
+      <fieldset class="fmt-step">
+        <legend><span class="fmt-no" aria-hidden="true">1</span>Listen</legend>
+        <div class="sim-row">
+          <label class="field"><span>Port</span><input type="number" id="simPort" min="1" max="65535" step="1" value="8583"></label>
+          <fieldset class="seg-set"><legend>For</legend>
+            <div class="seg">
+              <label><input type="radio" name="simListen" value="local" checked><span>This PC</span></label>
+              <label><input type="radio" name="simListen" value="network"><span>The network</span></label>
+            </div>
+          </fieldset>
+          <label class="field"><span>Format</span><select id="simProfile"></select></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="fmt-step">
+        <legend><span class="fmt-no" aria-hidden="true">2</span>Answers <span class="sim-sub">first match wins · otherwise approve</span></legend>
+        <ul class="sim-rules" id="simRules"></ul>
+        <div class="sim-rule-form" id="simRuleForm" hidden>
+          <div class="sim-row">
+            <label class="field sim-wide"><span>Name</span><input type="text" id="srName" maxlength="60" placeholder="Big amounts"></label>
+            <label class="field"><span>Answer <em>code</em></span><input type="text" id="srCode" class="mono" maxlength="4" placeholder="05"></label>
+          </div>
+          <div class="sim-row">
+            <label class="field"><span>Message <em>100, 200 …</em></span><input type="text" id="srCls" class="mono" placeholder="any"></label>
+            <label class="field"><span>Processing code <em>starts</em></span><input type="text" id="srProc" class="mono" inputmode="numeric" placeholder="any"></label>
+            <label class="field"><span>Card <em>starts</em></span><input type="text" id="srBin" class="mono" inputmode="numeric" placeholder="any"></label>
+          </div>
+          <div class="sim-row">
+            <label class="field"><span>Account</span><input type="text" id="srAccount" class="mono" inputmode="numeric" placeholder="any"></label>
+            <label class="field"><span>Amount from</span><input type="text" id="srMin" inputmode="decimal" placeholder="any"></label>
+            <label class="field"><span>Amount to</span><input type="text" id="srMax" inputmode="decimal" placeholder="any"></label>
+          </div>
+          <div class="sim-row">
+            <label class="field"><span>Delay <em>ms</em></span><input type="number" id="srDelay" min="0" max="120000" step="100" placeholder="0"></label>
+            <label class="fmt-check"><input type="checkbox" id="srNoReply"><span>Don't reply at all</span></label>
+          </div>
+          <div class="fb-actions">
+            <button type="button" class="link-btn danger" id="srDelete" hidden>Remove rule</button>
+            <span class="fb-msg" id="srMsg"></span>
+            <button type="button" class="btn ghost" id="srCancel">Cancel</button>
+            <button type="button" class="btn primary" id="srSave">Keep rule</button>
+          </div>
+        </div>
+        <button type="button" class="btn sm ghost-plain" id="simAddRule">Add a rule</button>
+      </fieldset>
+
+      <fieldset class="fmt-step">
+        <legend><span class="fmt-no" aria-hidden="true">3</span>Balances</legend>
+        <div class="sim-row sim-bal">
+          <label class="fmt-check"><input type="checkbox" id="simKeep"><span>Keep balances, from</span></label>
+          <input type="text" id="simOpening" inputmode="decimal" value="10000.00" aria-label="Opening balance">
+          <label class="field"><span>Currency</span><input type="text" id="simCcy" class="mono" maxlength="3" value="840"></label>
+        </div>
+      </fieldset>
+
+      <span class="plan-hint" id="simLock" hidden>The simulator is part of the Team plan.</span>
+      <p class="fb-msg" id="simMsg" role="status"></p>
+      <button type="submit" class="btn primary sim-go" id="simGo">Start simulator</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="sim-stats">
+      <div><span class="kpi-label">Status</span><b id="simState">Stopped</b></div>
+      <div><span class="kpi-label">Messages</span><b id="simCount">0</b></div>
+      <div><span class="kpi-label">Connected</span><b id="simConn">0</b></div>
+    </div>
+    <p class="sim-where" id="simWhere"></p>
+    <div class="table-wrap tall"><table class="tbl">
+      <thead><tr><th>Time</th><th>Message</th><th>Card</th><th>Account</th><th class="num">Amount</th><th>Answer</th></tr></thead>
+      <tbody id="simLog"><tr><td colspan="6" class="muted">Nothing yet. Start the simulator and point your ATM, POS or switch at it.</td></tr></tbody>
+    </table></div>
+    <div id="simBalBox" hidden>
+      <h3 class="sim-h3">Balances <span class="sim-sub">available / ledger</span></h3>
+      <div class="table-wrap short"><table class="tbl"><tbody id="simBal"></tbody></table></div>
+    </div>
   </section>
 </main>
 </div>
@@ -906,7 +1070,7 @@
       </dl>
 
       <p class="gx-foot">SwitchProof is a product of <a href="https://trustroutetechnologies.com" rel="noopener">TrustRoute Technologies</a>. For use with the Oracle FLEXCUBE ATM/POS switch. Not affiliated with Oracle; Oracle and FLEXCUBE are trademarks of Oracle Corporation.</p>
-      <nav class="gx-legal" aria-label="Plans and policies"><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a><a href="mailto:support@switchproof.online">Contact</a></nav>
+      <nav class="gx-legal" aria-label="Plans and policies"><a href="formats.html">Formats</a><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a><a href="mailto:support@switchproof.online">Contact</a></nav>
     </div>
   </aside>
 
@@ -944,6 +1108,27 @@
       <section class="gate-step" data-step="connect" hidden>
         <p class="gx-eyebrow">Set up</p>
         <h2>Connect your agent</h2>
+        <div class="gx-allow" id="gcAllow" hidden>
+          <div id="gcAsk">
+            <b>Connect to SwitchProof on this PC</b>
+            <span>Your browser may ask if this site can reach apps on this device. Choose <b>Allow</b>.</span>
+          </div>
+          <div id="gcBlocked" hidden>
+            <b>Your browser is blocking this page</b>
+            <span>It won't let this site reach SwitchProof on this PC. To allow it:</span>
+            <ol>
+              <li>Click the icon left of the address, then <b>Site settings</b>.</li>
+              <li>Set <b>Loopback network</b> to <b>Allow</b>.</li>
+              <li>Come back here and press <b>Check again</b>.</li>
+            </ol>
+            <span class="gx-allow-it">Set by your organisation? Ask IT to allow <span class="mono" id="gcSite"></span> for local network access (Chrome and Edge policy <span class="mono">LocalNetworkAccessAllowedForUrls</span>).</span>
+          </div>
+          <div id="gcRetry" hidden>
+            <b>SwitchProof isn't answering</b>
+            <span>Open SwitchProof from the Start menu, then try again.</span>
+          </div>
+          <button class="gx-btn" id="gcAllowBtn" type="button">Connect</button>
+        </div>
         <p class="gx-note">The console runs in this browser. Messages to your switch are sent by SwitchProof for Windows on a PC inside your network.</p>
         <p class="gx-note gx-note-upgrade"><b>Already installed SwitchProof?</b> Versions before 1.4 can't connect to switchproof.online. Download and run the installer below: it closes the old version, updates it and keeps your targets, test cases and results.</p>
         <ol class="gx-steps">
@@ -959,7 +1144,7 @@
           </li>
           <li>
             <b>SwitchProof starts by itself</b>
-            <span>When the installer finishes (next time, from the Start menu or desktop). This page connects automatically. Keep the SwitchProof window open while you test.</span>
+            <span>When the installer finishes (next time, from the Start menu or desktop). It opens this site: press <b>Connect</b>, and choose <b>Allow</b> if your browser asks. Keep the SwitchProof window open while you test.</span>
           </li>
           <li>
             <b>Add your switch</b>
@@ -1054,6 +1239,109 @@
       <span class="fb-msg" id="dbMsg"></span>
       <button type="button" class="btn ghost" id="dbTestBtn">Test connection</button>
       <button type="submit" class="btn primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="fb-dlg fmt-dlg" id="fmtDlg" aria-labelledby="fmtTitle">
+  <div class="dlg-head">
+    <div>
+      <p class="fb-eyebrow">Message format</p>
+      <h2 id="fmtTitle">New format</h2>
+      <a class="fmt-help" href="formats.html" target="_blank" rel="noopener">How formats work</a>
+    </div>
+    <button type="button" class="t-btn" id="fmtClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <form id="fmtForm" autocomplete="off" novalidate>
+    <fieldset class="fmt-step">
+      <legend><span class="fmt-no" aria-hidden="true">1</span>Start from</legend>
+      <div class="fmt-start">
+        <div class="seg" id="fmtBase">
+          <label><input type="radio" name="fmtBase" value="iso-87" checked><span>ISO 1987</span></label>
+          <label><input type="radio" name="fmtBase" value="iso-93"><span>ISO 1993</span></label>
+          <label><input type="radio" name="fmtBase" value="iso-2003"><span>ISO 2003</span></label>
+          <label><input type="radio" name="fmtBase" value="flexcube-87"><span>FLEXCUBE</span></label>
+        </div>
+        <label class="field fmt-name"><span>Name</span><input type="text" id="fmtName" name="name" maxlength="60" placeholder="Bank X switch" aria-describedby="fmtNameErr" autofocus></label>
+      </div>
+      <p class="fmt-err" id="fmtNameErr" hidden></p>
+    </fieldset>
+
+    <fieldset class="fmt-step">
+      <legend><span class="fmt-no" aria-hidden="true">2</span>How your switch writes messages</legend>
+      <div class="fmt-wire">
+        <fieldset class="seg-set"><legend>Text</legend>
+          <div class="seg">
+            <label><input type="radio" name="fmtText" value="ascii" checked><span>ASCII</span></label>
+            <label><input type="radio" name="fmtText" value="ebcdic"><span>EBCDIC</span></label>
+          </div>
+        </fieldset>
+        <fieldset class="seg-set"><legend>Numbers</legend>
+          <div class="seg">
+            <label><input type="radio" name="fmtNumbers" value="text" checked><span>Text</span></label>
+            <label><input type="radio" name="fmtNumbers" value="bcd"><span>Packed</span></label>
+          </div>
+        </fieldset>
+        <fieldset class="seg-set"><legend>Field lengths</legend>
+          <div class="seg">
+            <label><input type="radio" name="fmtLengths" value="text" checked><span>Text</span></label>
+            <label><input type="radio" name="fmtLengths" value="bcd"><span>Packed</span></label>
+            <label><input type="radio" name="fmtLengths" value="binary"><span>Binary</span></label>
+          </div>
+        </fieldset>
+        <fieldset class="seg-set"><legend>Bitmap</legend>
+          <div class="seg">
+            <label><input type="radio" name="fmtBitmap" value="binary" checked><span>Binary</span></label>
+            <label><input type="radio" name="fmtBitmap" value="hex"><span>Hex</span></label>
+          </div>
+        </fieldset>
+        <fieldset class="seg-set"><legend>Message length</legend>
+          <div class="seg">
+            <label><input type="radio" name="fmtLengthHeader" value="binary2" checked><span>2 bytes</span></label>
+            <label><input type="radio" name="fmtLengthHeader" value="ascii4"><span>4 digits</span></label>
+            <label><input type="radio" name="fmtLengthHeader" value="bcd2"><span>Packed</span></label>
+            <label><input type="radio" name="fmtLengthHeader" value="binary4"><span>4 bytes</span></label>
+          </div>
+        </fieldset>
+        <label class="field"><span>Header <em>hex, or text: and characters</em></span><input type="text" id="fmtHeader" name="header" class="mono" placeholder="6000030000" spellcheck="false" autocapitalize="none" autocorrect="off" aria-describedby="fmtWireErr"></label>
+      </div>
+      <details class="fmt-more">
+        <summary>More settings</summary>
+        <div class="fmt-wire">
+          <label class="field"><span>EBCDIC code page</span><select id="fmtPage" name="page"><option value="cp037">cp037</option><option value="cp500">cp500</option><option value="cp1047">cp1047</option></select></label>
+          <fieldset class="seg-set"><legend>Message type</legend>
+            <div class="seg">
+              <label><input type="radio" name="fmtMti" value="text" checked><span>4 characters</span></label>
+              <label><input type="radio" name="fmtMti" value="bcd"><span>Packed</span></label>
+            </div>
+          </fieldset>
+          <fieldset class="seg-set"><legend>An odd number of packed digits gets</legend>
+            <div class="seg">
+              <label><input type="radio" name="fmtPad" value="left" checked><span>A leading 0</span></label>
+              <label><input type="radio" name="fmtPad" value="right"><span>A trailing F</span></label>
+            </div>
+          </fieldset>
+          <label class="field"><span>Reply header to skip <em>bytes</em></span><input type="number" id="fmtSkip" name="skip" min="0" max="999" step="1" placeholder="0"></label>
+          <label class="field"><span>Trailer <em>hex</em></span><input type="text" id="fmtTrailer" name="trailer" class="mono" placeholder="03" spellcheck="false" autocapitalize="none" autocorrect="off"></label>
+          <label class="fmt-check"><input type="checkbox" id="fmtSelf" name="self"><span>The message length counts its own bytes</span></label>
+        </div>
+      </details>
+      <p class="fmt-err" id="fmtWireErr" hidden></p>
+    </fieldset>
+
+    <fieldset class="fmt-step">
+      <legend><span class="fmt-no" aria-hidden="true">3</span>Check with a message from your switch</legend>
+      <label class="sr-only" for="fmtHex">A message as hex, from the switch's trace or log</label>
+      <textarea id="fmtHex" name="hex" class="mono" rows="3" spellcheck="false" autocapitalize="none" autocorrect="off" placeholder="0200 7020 0000 0880 8000 16 4000 0000 0000 0002 3100 00 ..."></textarea>
+      <div class="fmt-read" id="fmtRead" aria-live="polite"></div>
+    </fieldset>
+
+    <div class="fmt-sample" id="fmtSampleOut" hidden></div>
+    <div class="fb-actions">
+      <button type="button" class="link-btn danger" id="fmtDelete" hidden>Remove format</button>
+      <span class="fb-msg" id="fmtMsg" role="status"></span>
+      <button type="button" class="btn ghost" id="fmtSample">See what SwitchProof sends</button>
+      <button type="submit" class="btn primary">Save format</button>
     </div>
   </form>
 </dialog>
@@ -1509,8 +1797,57 @@
     <button type="button" class="t-btn" id="relClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
   <p class="rel-lead">What changed in each version of SwitchProof. The website always runs the latest release; SwitchProof on your PC asks to update when it's older than the website needs.</p>
-  <nav class="rel-index" id="relIndex" aria-label="Versions"><button type="button" data-rel="1.4.9">1.4.9</button><button type="button" data-rel="1.4.8">1.4.8</button><button type="button" data-rel="1.4.7">1.4.7</button><button type="button" data-rel="1.4.6">1.4.6</button><button type="button" data-rel="1.4.5">1.4.5</button><button type="button" data-rel="1.4.4">1.4.4</button><button type="button" data-rel="1.4.3">1.4.3</button><button type="button" data-rel="1.4.2">1.4.2</button><button type="button" data-rel="1.4.1">1.4.1</button><button type="button" data-rel="1.4.0">1.4.0</button><button type="button" data-rel="1.3.0">1.3.0</button><button type="button" data-rel="early">Before 1.3.0</button></nav>
+  <nav class="rel-index" id="relIndex" aria-label="Versions"><button type="button" data-rel="1.5.0">1.5.0</button><button type="button" data-rel="1.4.9">1.4.9</button><button type="button" data-rel="1.4.8">1.4.8</button><button type="button" data-rel="1.4.7">1.4.7</button><button type="button" data-rel="1.4.6">1.4.6</button><button type="button" data-rel="1.4.5">1.4.5</button><button type="button" data-rel="1.4.4">1.4.4</button><button type="button" data-rel="1.4.3">1.4.3</button><button type="button" data-rel="1.4.2">1.4.2</button><button type="button" data-rel="1.4.1">1.4.1</button><button type="button" data-rel="1.4.0">1.4.0</button><button type="button" data-rel="1.3.0">1.3.0</button><button type="button" data-rel="early">Before 1.3.0</button></nav>
   <div class="rel-body" id="relBody">
+    <section class="rel" id="rel-1.5.0">
+        <div class="rel-head"><h3>1.5.0</h3><span class="rel-date">11 November 2026</span><span class="rel-tag">Any switch format, honest numbers, a simulator and a command line</span></div>
+        <h4>Message formats <span class="rel-plan">Team</span></h4>
+        <ul>
+          <li>Describe your switch's format without writing a file: Target, then New format. Pick the text encoding (ASCII or EBCDIC), packed or text numbers, the bitmap, the message length header, and any header your switch adds.</li>
+          <li>Paste a message captured from your switch and SwitchProof reads it field by field with your format, showing exactly where it stops if something doesn't fit.</li>
+          <li>New field kinds for packed numbers and track data, and chip data (field 55) shown tag by tag.</li>
+          <li>Text fields now accept every printable character, such as the slash and comma in a merchant name.</li>
+          <li>A new help page explains each setting, with examples.</li>
+        </ul>
+        <h4>Load tests</h4>
+        <ul>
+          <li>Results now show how long half, 95% and 99% of answers took, and the slowest, not only the average.</li>
+          <li>Ramp-up: let the rate climb to full over the first seconds of a run.</li>
+          <li>If SwitchProof itself could not keep the pace you asked for, the results say so and suggest how many to run at once, so a slow tool is never mistaken for a slow switch.</li>
+          <li>The chart follows the whole run second by second, and long runs no longer grow in memory.</li>
+        </ul>
+        <h4>Connection to the switch</h4>
+        <ul>
+          <li>Kept-open connections: messages share connections that stay open, as an acquirer's link does, with replies matched by trace number and an echo test when the line is quiet.</li>
+          <li>TLS, with your switch's certificate pinned by its fingerprint or trusted through your PC.</li>
+        </ul>
+        <h4>Security on messages</h4>
+        <ul>
+          <li>Send an encrypted PIN block (ISO formats 0, 1 and 3), chip data, and a MAC (X9.19, X9.9 or triple-DES CBC) with every card request: Target settings, Security.</li>
+          <li>Keys are test keys you paste once. SwitchProof shows only their check value afterwards and protects them with your Windows account.</li>
+          <li>The chip cryptogram is a placeholder unless you supply one, and MACs on replies are not checked yet.</li>
+        </ul>
+        <h4>Simulator <span class="rel-plan">Team</span></h4>
+        <ul>
+          <li>New Simulator tab: SwitchProof answers as the switch or issuer, so you can test an ATM, a POS or your own switch's link without the real host.</li>
+          <li>Rules decide the answer by message type, processing code, card range, account or amount: a response code, a delay, or no reply at all. Everything else is approved.</li>
+          <li>It can keep balances, so withdrawals, holds, reversals and insufficient funds behave as they would on a host.</li>
+        </ul>
+        <h4>Money check without a database <span class="rel-plan">Enterprise</span></h4>
+        <ul>
+          <li>UAT can now check the money side by balance inquiry before and after each step, for switches where you have no access to the core database.</li>
+        </ul>
+        <h4>Command line</h4>
+        <ul>
+          <li>switchproof-cli runs UAT cases and load tests from a build pipeline, writes JUnit results, and ends with an exit code your pipeline can act on. It is installed next to SwitchProof.</li>
+          <li>A Linux bundle (needs Java 8 or later) is available on request.</li>
+        </ul>
+        <h4>Also</h4>
+        <ul>
+          <li>Saved database passwords are now protected by your Windows account instead of being kept as plain text. Existing ones are converted the first time SwitchProof starts.</li>
+          <li>The connect screen works with Chrome's new local network permission.</li>
+        </ul>
+      </section>
     <section class="rel" id="rel-1.4.9">
         <div class="rel-head"><h3>1.4.9</h3><span class="rel-date">8 November 2026</span><span class="rel-tag">Starts cleanly, every time</span></div>
         <h4>Starting SwitchProof</h4>
@@ -1660,8 +1997,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20261109132336"></script>
-<script src="agent.js?v=20261109132336"></script>
-<script src="app.js?v=20261109132336"></script>
+<script src="config.js?v=20261111230940"></script>
+<script src="agent.js?v=20261111230940"></script>
+<script src="app.js?v=20261111230940"></script>
 </body>
 </html>

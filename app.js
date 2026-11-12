@@ -145,7 +145,8 @@ const dataText = {};          // raw rows text per type, so switching types does
 let parsed = [];              // rows parsed for the current type
 let currentJobId = null;
 let pollTimer = null;
-let series = [];              // chart points {t, tps, lat}
+let series = [];              // chart points {t, tps, lat} worked out here from the status polls (short runs, older agents)
+let agentSeries = [];         // the same from the agent's own timeline: used once it has three points
 let lastPoll = null;
 
 // ---------- Toasts ----------
@@ -192,7 +193,10 @@ async function loadTargets() {
   try {
     const pr = await targetsApi('/api/profiles');
     profiles = pr.profiles || [];
-    $('tfProfile').innerHTML = profiles.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}${p.verified ? ' — verified' : ' — not tested on a switch'}</option>`).join('');
+    const picked = $('tfProfile').value;
+    $('tfProfile').innerHTML = profiles.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}${p.verified ? ' — verified' : p.custom ? ' — yours' : ' — not tested on a switch'}</option>`).join('');
+    if (picked && profiles.some(p => p.id === picked)) $('tfProfile').value = picked;
+    fmtLinks(pr.broken || []);
   } catch (e) { /* older agent without profiles: FLEXCUBE 1987 assumed */ }
   try { targetsState = await targetsApi('/api/targets'); renderTargets(); } catch (e) { /* shown via conn indicator */ }
   loadCustomTypes();
@@ -203,14 +207,16 @@ function renderTargets() {
   $('targetName').textContent = t ? t.name : '—';
   $('targetAddr').textContent = t ? `${t.host}:${t.port}` : '';
   const prof = profileOf(t);
-  $('targetFmt').textContent = 'ISO ' + prof.version + (prof.verified ? '' : ' · untested');
-  $('targetFmt').className = 'target-fmt' + (prof.verified ? '' : ' warn');
+  // A target whose custom format is no longer on this PC sends nothing until it gets a format again (the agent refuses).
+  const lost = !!(t && t.profileMissing);
+  $('targetFmt').textContent = lost ? 'format missing' : 'ISO ' + prof.version + (prof.verified ? '' : ' · untested');
+  $('targetFmt').className = 'target-fmt' + (lost || !prof.verified ? ' warn' : '');
   targetTitle();
   $('targetList').innerHTML = targetsState.targets.map(x => {
     const st = targetTests[x.id];
     return `<li class="t-item ${x.id === targetsState.active ? 'active' : ''}" data-id="${escapeHtml(x.id)}" title="Use this target">
       <span class="t-radio"></span>
-      <span class="t-main"><div class="t-name">${escapeHtml(x.name)}</div><div class="t-addr">${escapeHtml(x.host)}:${x.port} · ${escapeHtml(profileOf(x).name)}${bankDb[x.id] && bankDb[x.id].configured ? ' · money check' : ''}</div></span>
+      <span class="t-main"><div class="t-name">${escapeHtml(x.name)}</div><div class="t-addr">${escapeHtml(x.host)}:${x.port} · ${x.profileMissing ? '<span class="warn-t">message format missing: choose one again</span>' : escapeHtml(profileOf(x).name)}${bankDb[x.id] && bankDb[x.id].configured ? ' · money check' : ''}</div></span>
       ${st ? `<span class="t-status ${st.ok ? 'ok' : 'bad'}">${escapeHtml(st.text)}</span>` : ''}
       <span class="t-actions">
         <button type="button" class="t-btn" data-act="test" title="Test TCP connection"><svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 14 0M8.5 12a3.5 3.5 0 0 1 7 0"/><circle cx="12" cy="16" r="1.5"/></svg></button>
@@ -240,7 +246,8 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') openTarget
 async function testTarget(body, onDone) {
   try {
     const d = await targetsApi('/api/targets/test', body);
-    onDone(d.ok ? { ok: true, text: `reachable · ${d.ms}ms` } : { ok: false, text: d.error || 'unreachable' });
+    // TLS: the protocol, and the certificate's fingerprint (to pin a test switch's own certificate).
+    onDone(d.ok ? { ok: true, text: `reachable · ${d.ms}ms${d.tls ? ` · ${d.tls} · certificate ${d.fingerprint}` : ''}` } : { ok: false, text: d.error || 'unreachable' });
   } catch (e) { onDone({ ok: false, text: e.message }); }
 }
 
@@ -297,6 +304,310 @@ $('targetForm').addEventListener('submit', async (e) => {
     $('tfMsg').className = 'tf-msg ok'; $('tfMsg').textContent = editing ? 'saved' : 'added — click it above to use it';
   } catch (err) {
     $('tfMsg').className = 'tf-msg bad'; $('tfMsg').textContent = err.message;
+  }
+});
+
+// ---------- Message formats: write one for your switch, and check it against a real message ----------
+// A format is a custom message profile on the agent (IsoProfile): a built-in one to start from, how the switch
+// writes messages ("wire"), and the fields that differ. Nothing is sent to a switch from here: the agent only
+// reads the message that is pasted, and shows the bytes it would send.
+let fmt = null;        // the format being written: { isNew, def, framing (the agent's own, for what the format leaves unset), touched }
+let fmtDraft = null;   // a new format that was closed without saving: it comes back when New format is opened again
+let fmtTimer = null;
+const FMT_WIRE = { text: 'ascii', numbers: 'text', lengths: 'text', bitmap: 'binary', mti: 'text', pad: 'left' };
+const fmtRadio = (name) => (document.querySelector(`input[name="${name}"]:checked`) || {}).value;
+const fmtSetRadio = (name, value) => { const r = document.querySelector(`input[name="${name}"][value="${value}"]`); if (r) r.checked = true; };
+
+/** The links under the format picker: New format, Change this format (a custom one), and files that failed to load. */
+function fmtLinks(broken) {
+  const supported = profiles.length > 0 && profiles[0].wire !== undefined;   // an older agent can't save formats
+  const picked = profiles.find(p => p.id === $('tfProfile').value);
+  $('fmtNew').hidden = !supported;
+  $('fmtEdit').hidden = !(supported && picked && picked.custom);
+  if (broken) {
+    $('fmtBroken').hidden = !broken.length;
+    $('fmtBroken').textContent = broken.length ? `Not loaded: ${broken.map(b => b.file + ' (' + b.error + ')').join('; ')}` : '';
+  }
+}
+$('tfProfile').addEventListener('change', () => fmtLinks(null));
+
+function fmtSlug(name) {
+  let s = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 34) || 'format';
+  if (s.length < 2) s += '-x';
+  let id = s;
+  for (let i = 2; profiles.some(p => p.id === id); i++) id = s + '-' + i;
+  return id;
+}
+
+/** The wire settings in force for the format being written: its own, else plain text and the agent's framing. */
+function fmtWire() {
+  const w = Object.assign({}, FMT_WIRE, fmt.def.wire || {});
+  const f = fmt.framing || {};
+  if (w.lengthHeader == null) w.lengthHeader = f.lengthHeader || 'binary2';
+  if (w.lengthIncludesItself == null) w.lengthIncludesItself = !!f.lengthIncludesItself;
+  if (w.responseHeaderLength == null) w.responseHeaderLength = f.responseHeaderLength || 0;
+  return w;
+}
+
+function fmtFill() {
+  const d = fmt.def, w = fmtWire();
+  $('fmtTitle').textContent = fmt.isNew ? 'New format' : d.name || d.id;
+  $('fmtName').value = d.name || '';
+  fmtSetRadio('fmtBase', d.base || 'iso-87');
+  fmtSetRadio('fmtText', w.text === 'ascii' ? 'ascii' : 'ebcdic');
+  $('fmtPage').value = w.text === 'ascii' ? 'cp037' : w.text;
+  $('fmtPage').disabled = w.text === 'ascii';
+  fmtSetRadio('fmtNumbers', w.numbers);
+  fmtSetRadio('fmtLengths', w.lengths);
+  fmtSetRadio('fmtBitmap', w.bitmap);
+  fmtSetRadio('fmtMti', w.mti);
+  fmtSetRadio('fmtPad', w.pad);
+  fmtSetRadio('fmtLengthHeader', w.lengthHeader);
+  $('fmtSelf').checked = !!w.lengthIncludesItself;
+  $('fmtSkip').value = w.responseHeaderLength || '';
+  $('fmtHeader').value = (d.wire && d.wire.header) || '';
+  $('fmtHeader').placeholder = fmt.framing && fmt.framing.header ? fmt.framing.header + ' (this agent\'s setting)' : '6000030000';
+  $('fmtTrailer').value = (d.wire && d.wire.trailer) || '';
+  $('fmtDelete').hidden = fmt.isNew;
+  $('fmtHex').value = fmt.hex || '';
+  $('fmtSampleOut').hidden = true;
+  fmtProblem(null);
+  $('fmtMsg').textContent = '';
+  fmtRenderRead(null);
+}
+
+/** Reads the controls back into the definition. A framing setting is written only once the user has changed it. */
+function fmtCollect() {
+  const d = fmt.def, w = d.wire = d.wire || {};
+  d.name = $('fmtName').value.trim();
+  d.base = fmtRadio('fmtBase') || 'iso-87';
+  w.text = fmtRadio('fmtText') === 'ebcdic' ? $('fmtPage').value : 'ascii';
+  w.numbers = fmtRadio('fmtNumbers');
+  w.lengths = fmtRadio('fmtLengths');
+  w.bitmap = fmtRadio('fmtBitmap');
+  w.mti = fmtRadio('fmtMti');
+  w.pad = fmtRadio('fmtPad');
+  if (fmt.touched.lengthHeader) w.lengthHeader = fmtRadio('fmtLengthHeader');
+  if (fmt.touched.self) w.lengthIncludesItself = $('fmtSelf').checked;
+  if (fmt.touched.skip) w.responseHeaderLength = Number($('fmtSkip').value) || 0;
+  if (fmt.touched.header) { if ($('fmtHeader').value.trim()) w.header = $('fmtHeader').value.trim(); else delete w.header; }
+  if (fmt.touched.trailer) { if ($('fmtTrailer').value.trim()) w.trailer = $('fmtTrailer').value.trim(); else delete w.trailer; }
+  $('fmtPage').disabled = w.text === 'ascii';
+  fmt.hex = $('fmtHex').value;
+  return d;
+}
+
+/** The definition as the agent takes it. A format without a name yet gets a stand-in id, good for checking only. */
+function fmtDefinition() {
+  const d = Object.assign({}, fmtCollect());
+  if (!d.id) d.id = d.name ? fmtSlug(d.name) : 'unsaved-format';
+  if (!d.name) delete d.name;
+  if (d.fields && !Object.keys(d.fields).length) delete d.fields;
+  return d;
+}
+
+async function fmtOpen(id) {
+  try {
+    if (id) {
+      const r = await targetsApi('/api/profiles?id=' + encodeURIComponent(id));
+      // Only what a format is made of: a file written by hand may hold other names, which the agent would refuse on saving.
+      const known = ['id', 'name', 'base', 'description', 'fields', 'messages', 'approved', 'procCodes', 'wire', 'alwaysSecondaryBitmap'];
+      const def = {};
+      for (const k of known) if (r.definition && r.definition[k] !== undefined) def[k] = JSON.parse(JSON.stringify(r.definition[k]));
+      if (!def.id) def.id = id;
+      if (!def.name) def.name = r.name;
+      if (!def.fields) def.fields = {};
+      fmt = { isNew: false, def, framing: r.framing, touched: {}, hex: '' };
+    } else if (fmtDraft) {
+      fmt = fmtDraft;
+    } else {
+      const r = await targetsApi('/api/profiles?id=iso-87');   // for this agent's own framing settings
+      fmt = { isNew: true, def: { name: '', base: 'iso-87', wire: {}, fields: {} }, framing: r.framing, touched: {}, hex: '' };
+    }
+  } catch (e) { toast(e.message, 'bad'); return; }
+  fmtFill();
+  openTargets(false);
+  $('fmtDlg').showModal();
+  if (fmt.hex) fmtCheck();
+}
+$('fmtNew').addEventListener('click', () => fmtOpen(null));
+$('fmtEdit').addEventListener('click', () => fmtOpen($('tfProfile').value));
+$('fmtClose').addEventListener('click', () => $('fmtDlg').close());
+$('fmtDlg').addEventListener('close', () => clearTimeout(fmtTimer));
+
+/** A problem with what was entered: shown under its step, and the control marked. null clears. */
+function fmtProblem(p) {
+  for (const [box, input] of [['fmtNameErr', 'fmtName'], ['fmtWireErr', 'fmtHeader']]) {
+    const mine = p && p.box === box;
+    $(box).hidden = !mine;
+    $(box).textContent = mine ? p.text : '';
+    if (mine) $(input).setAttribute('aria-invalid', 'true'); else $(input).removeAttribute('aria-invalid');
+  }
+  if (p) $(p.focus).focus();
+}
+
+// Any change to a setting re-reads the pasted message a moment later.
+function fmtChanged(e) {
+  if (!fmt) return;
+  const t = e && e.target;
+  if (t) {
+    if (t.name === 'fmtLengthHeader') fmt.touched.lengthHeader = true;
+    if (t.id === 'fmtSelf') fmt.touched.self = true;
+    if (t.id === 'fmtSkip') fmt.touched.skip = true;
+    if (t.id === 'fmtHeader') fmt.touched.header = true;
+    if (t.id === 'fmtTrailer') fmt.touched.trailer = true;
+    if (t.id === 'fmtName' || t.id === 'fmtHeader') fmtProblem(null);
+    if (t.name === 'fmtBase') fmt.def.fields = {};   // another starting point: its own field formats
+  }
+  fmtCollect();
+  // A new format is kept as it is being written, so closing the dialog by mistake (Esc) loses nothing:
+  // New format opens it again as it was. Kept on every change, not on closing: nothing may run after a close.
+  if (fmt.isNew && !fmt.saved) fmtDraft = fmt;
+  clearTimeout(fmtTimer);
+  fmtTimer = setTimeout(fmtCheck, 350);
+}
+$('fmtForm').addEventListener('input', (e) => { if (!e.target.classList.contains('fmt-spec')) fmtChanged(e); });
+
+let fmtSeq = 0;
+async function fmtCheck() {
+  if (!fmt) return;
+  const hex = $('fmtHex').value.trim();
+  if (!hex) { fmtRenderRead(null); return; }
+  const seq = ++fmtSeq;
+  let r;
+  try {
+    // Not targetsApi: a message that doesn't read is an answer here (with the fields that did read), not a failure.
+    const res = await apiFetch('/api/profiles/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile: fmtDefinition(), hex }) });
+    r = await res.json();
+    if (!res.ok) r = { ok: false, error: r.error || 'The agent refused the request', fields: [], pending: [] };   // the format itself is refused
+  } catch (e) {
+    r = { ok: false, error: 'SwitchProof on this PC is not answering.', fields: [], pending: [] };
+  }
+  if (seq === fmtSeq) fmtRenderRead(r);
+}
+
+/** Other ways the same field is written, offered when reading stops at it (or at the field after it). */
+function fmtAlternatives(spec) {
+  const m = /^([A-Z]+):(\d+)/.exec(spec || '');
+  if (!m) return [];
+  const [, kind, len] = m, n = Number(len);
+  const alt = {
+    LL: ['LLN:' + n, 'LLZ:' + n], LLL: ['LLLN:' + n, 'LLLB:' + n], LLN: ['LL:' + n], LLLN: ['LLL:' + n], LLZ: ['LL:' + n], LLLZ: ['LLL:' + n],
+    N: ['AN:' + n, 'N:' + n + ':text', 'N:' + n + ':bcd'], AN: ['N:' + n], B: ['AN:' + n * 2], LLB: ['LL:' + n], LLLB: ['LLL:' + n],
+  }[kind] || [];
+  return alt.filter(a => a !== spec).slice(0, 3);
+}
+
+function fmtRenderRead(r) {
+  const box = $('fmtRead');
+  if (!r) { box.innerHTML = '<p class="fmt-hint">Paste one message as hex: a request or a reply, with or without its length in front.</p>'; return; }
+  const bad = r.error ? Number((/field (\d+)/.exec(r.error) || [])[1]) || null : null;
+  const head = [];
+  if (r.mti) head.push(`<span class="mono">${escapeHtml(r.mti)}</span>`);
+  if (r.skipped && r.skipped.length) head.push(escapeHtml(r.skipped.join(' and ') + ' skipped'));
+  // A text field that reads as something other than letters and digits is most likely packed or binary on the switch:
+  // it "reads", but wrongly, and the fields after it are then read from the wrong place.
+  const odd = (f) => /^(AN|LL|LLL|LLLL):/.test(f.format || '') && /[^\x20-\x7E]/.test(f.value || '');
+  const rows = (r.fields || []).map(f => ({ f, state: odd(f) ? 'odd' : 'ok' })).concat((r.pending || []).map(f => ({ f, state: f.n === bad ? 'bad' : 'wait' })));
+  if (r.ok) head.push(rows.some(x => x.state === 'odd') || r.warning
+    ? '<span class="warn-t">read to the end, but check the marked fields: start with the first</span>'
+    : '<span class="fmt-ok">every field reads</span>');
+  const before = (r.fields || []).length ? r.fields[r.fields.length - 1] : null;   // the last field that did read
+  // A length that isn't a number usually means the field before is a different size, so that one is offered too.
+  const blamePrev = /length that is not a number/.test(r.error || '');
+  const tries = (f) => fmtAlternatives(f.format).map(a => `<button type="button" class="link-btn fmt-try" data-n="${f.n}" data-spec="${escapeHtml(a)}">Try ${escapeHtml(a)}</button>`).join(' ');
+  box.innerHTML =
+    (head.length ? `<p class="fmt-head">${head.join(' · ')}</p>` : '')
+    + (r.error && !bad ? `<p class="fmt-err">${escapeHtml(r.error)}</p>` : '')
+    + (r.warning ? `<p class="fmt-err warn-t">${escapeHtml(r.warning)}</p>` : '')
+    + (rows.length ? `<div class="table-wrap"><table class="tbl fmt-tbl">
+        <thead><tr><th>Field</th><th>Name</th><th>Format</th><th>Reads as</th></tr></thead><tbody>${rows.map(({ f, state }) => `
+        <tr class="${state === 'bad' ? 'row-bad' : state === 'odd' ? 'row-warn' : state === 'wait' ? 'row-muted' : ''}">
+          <td class="num">${f.n}</td>
+          <td class="muted">${escapeHtml(f.name || '')}</td>
+          <td><input type="text" class="fmt-spec mono" data-n="${f.n}" value="${escapeHtml(f.format || '')}" aria-label="Format of field ${f.n}" spellcheck="false" autocapitalize="none" autocorrect="off"></td>
+          <td class="wrap">${state === 'ok'
+            ? `<span class="mono">${escapeHtml(f.value == null ? '' : f.value)}</span>${f.tags ? `<div class="sub">${f.tags.length} chip tag${f.tags.length === 1 ? '' : 's'}: ${escapeHtml(f.tags.map(t => t.tag).join(' '))}</div>` : ''}`
+            : state === 'odd'
+              ? `Not readable as text: this field is probably packed or binary on your switch.<div class="fmt-tries">${tries(f)}</div>`
+              : state === 'bad'
+                ? `${escapeHtml(r.error)}<div class="fmt-tries">${tries(f)}${blamePrev && before && fmtAlternatives(before.format).length ? ` <span class="muted">or field ${before.n}:</span> ${tries(before)}` : ''}</div>`
+                : '<span class="muted">not read yet</span>'}</td>
+        </tr>`).join('')}</tbody></table></div>` : '');
+}
+
+// A field's format, changed in the table: kept as one of the format's own fields, and the message read again.
+function fmtSetField(n, spec) {
+  spec = String(spec || '').trim();
+  const parts = spec.split(':');
+  parts[0] = (parts[0] || '').toUpperCase();
+  if (!spec) delete fmt.def.fields[n]; else fmt.def.fields[n] = parts.join(':');
+  if (fmt.isNew && !fmt.saved) fmtDraft = fmt;
+  fmtCheck();
+}
+$('fmtRead').addEventListener('change', (e) => { if (e.target.classList.contains('fmt-spec')) fmtSetField(e.target.dataset.n, e.target.value); });
+$('fmtRead').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.classList.contains('fmt-spec')) { e.preventDefault(); e.target.blur(); }   // Enter applies the format, it doesn't save the form
+});
+$('fmtRead').addEventListener('click', (e) => {
+  const b = e.target.closest('.fmt-try');
+  if (b) fmtSetField(b.dataset.n, b.dataset.spec);
+});
+
+$('fmtSample').addEventListener('click', async () => {
+  const out = $('fmtSampleOut');
+  $('fmtMsg').className = 'fb-msg'; $('fmtMsg').textContent = '';
+  try {
+    const r = await targetsApi('/api/profiles/sample', { profile: fmtDefinition(), targetId: targetsState.active });
+    const around = [r.lengthHeader && `length ${r.lengthHeader}`, r.header && `header ${r.header}`, r.trailer && `trailer ${r.trailer}`].filter(Boolean).join(' · ');
+    out.innerHTML = `<p class="fmt-head">A balance inquiry as SwitchProof would send it · ${r.bytes} bytes${around ? ' · <span class="mono">' + escapeHtml(around) + '</span>' : ''}</p>
+      <div class="table-wrap"><table class="tbl fmt-tbl"><thead><tr><th>Field</th><th>Name</th><th>Value</th><th>Bytes (hex)</th></tr></thead><tbody>${r.parts.map(p => `
+        <tr><td class="num">${p.n < 2 ? '' : p.n}</td><td class="muted">${escapeHtml(p.name || '')}</td><td>${escapeHtml(p.value == null ? '' : p.value)}</td>
+        <td class="wrap mono">${p.hex == null ? '<span class="muted">card number: not shown</span>' : escapeHtml(p.hex)}</td></tr>`).join('')}</tbody></table></div>`;
+    out.hidden = false;
+    out.scrollIntoView({ block: 'nearest' });
+  } catch (e) {
+    out.hidden = true;
+    $('fmtMsg').className = 'fb-msg bad'; $('fmtMsg').textContent = e.message;
+  }
+});
+
+$('fmtForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  fmtCollect();
+  if (!fmt.def.name) { fmtProblem({ box: 'fmtNameErr', focus: 'fmtName', text: 'Give the format a name, such as the switch it is for.' }); return; }
+  const header = $('fmtHeader').value.trim();
+  if (header && !/^text:/i.test(header) && !/^([0-9a-f]{2}\s*)+$/i.test(header)) {
+    fmtProblem({ box: 'fmtWireErr', focus: 'fmtHeader', text: 'The header is hex digits in pairs (6000030000), or text: followed by characters (text:ISO016000010).' });
+    return;
+  }
+  const def = fmtDefinition();
+  $('fmtMsg').className = 'fb-msg'; $('fmtMsg').textContent = 'saving…';
+  try {
+    await targetsApi('/api/profiles', { profile: def });
+    fmt.saved = true;
+    fmtDraft = null;
+    $('fmtDlg').close();
+    await loadTargets();
+    $('tfProfile').value = def.id;      // ready to be given to a target
+    fmtLinks(null);
+    openTargets(true);
+    toast(`Format ${def.name} saved. Pick it for a target.`, 'ok');
+  } catch (err) {
+    $('fmtMsg').className = 'fb-msg bad'; $('fmtMsg').textContent = err.message;
+  }
+});
+
+$('fmtDelete').addEventListener('click', async () => {
+  if (!fmt || fmt.isNew || !confirm(`Remove the format ${fmt.def.name || fmt.def.id}?`)) return;
+  try {
+    await targetsApi('/api/profiles/delete', { id: fmt.def.id });
+    fmt.saved = true;
+    $('fmtDlg').close();
+    await loadTargets();
+    toast('Format removed', 'ok');
+  } catch (err) {
+    $('fmtMsg').className = 'fb-msg bad'; $('fmtMsg').textContent = err.message;
   }
 });
 
@@ -592,8 +903,8 @@ $('templateBtn').addEventListener('click', () => {
 // ---------- Load profile & summaries ----------
 // Browser-local: amount and rotating PANs. Per target (targets.json): terminal, institutions, currency, card.
 const LOCAL_FIELDS = ['amount', 'pansText'];
-const TARGET_FIELDS = ['terminalId', 'acquiringInstitution', 'forwardingInstitution', 'currencyCode', 'pan', 'remoteAcquirer'];
-const BUILTIN_DEFAULTS = { terminalId: 'ATM1', acquiringInstitution: '100001', forwardingInstitution: '', currencyCode: '840', pan: '4000000000000002', remoteAcquirer: '' };
+const TARGET_FIELDS = ['terminalId', 'acquiringInstitution', 'forwardingInstitution', 'currencyCode', 'pan', 'remoteAcquirer', 'balanceCheck', 'connection', 'links', 'echoSeconds', 'tls', 'tlsPin', 'pin', 'pinFormat', 'chip', 'mac'];
+const BUILTIN_DEFAULTS = { terminalId: 'ATM1', acquiringInstitution: '100001', forwardingInstitution: '', currencyCode: '840', pan: '4000000000000002', remoteAcquirer: '', balanceCheck: 'off', connection: 'each', links: '', echoSeconds: '', tls: 'off', tlsPin: '', pin: '', pinFormat: '0', chip: 'off', mac: 'off' };
 const savedDefaults = store.get('defaults', null);
 if (savedDefaults) LOCAL_FIELDS.forEach(f => { if (savedDefaults[f] != null) $(f).value = savedDefaults[f]; });
 LOCAL_FIELDS.forEach(f => $(f).addEventListener('input', () => {
@@ -614,6 +925,7 @@ function fillTargetDefaults(force) {
   $('defaultsSaved').textContent = '';
   renderPreview();
   srcFill(t);
+  secFill(t);
 }
 TARGET_FIELDS.forEach(f => $(f).addEventListener('input', () => {
   refreshSummaries();
@@ -633,7 +945,7 @@ TARGET_FIELDS.forEach(f => $(f).addEventListener('input', () => {
     } catch (e) { $('defaultsSaved').className = 'saved-note bad'; $('defaultsSaved').textContent = e.message; }
   }, 600);
 }));
-['count', 'duration', 'concurrency'].forEach(f => $(f).addEventListener('input', refreshSummaries));
+['count', 'duration', 'rampSeconds', 'concurrency'].forEach(f => $(f).addEventListener('input', refreshSummaries));
 $('matchRows').addEventListener('change', refreshSummaries);
 
 // ---------- Sources: where transactions come from (saved per target) ----------
@@ -855,8 +1167,18 @@ function refreshSummaries() {
   $('matchRows').closest('.switch').style.display = usesData ? '' : 'none';
 
   const count = Number($('count').value) || 0;
-  const dur = Number($('duration').value) || 0;
-  $('tpsHint').textContent = dur > 0 ? `≈ ${(count / dur).toFixed(count / dur < 10 ? 1 : 0)} tx/s` : 'burst';
+  const dur = Math.floor(Number($('duration').value) || 0);
+  // With a ramp-up the rate climbs to full and holds: the same executions in the same time, so the full rate is a little higher.
+  // An agent from before ramp-up existed would ignore it: the field is off there (its format list has no "wire").
+  const canRamp = !profiles.length || profiles[0].wire !== undefined;
+  if (!canRamp) $('rampSeconds').value = 0;
+  const ramp = Math.min(Math.max(0, Math.floor(Number($('rampSeconds').value) || 0)), dur);
+  const rate = dur > 0 ? count / (dur - ramp / 2) : 0;
+  $('tpsHint').textContent = dur > 0 ? `≈ ${rate.toFixed(rate < 10 ? 1 : 0)} tx/s${ramp ? ` after ${ramp}s` : ''}` : 'burst';
+  $('rampSeconds').disabled = dur === 0 || !canRamp;
+  $('rampSeconds').closest('.field').title = canRamp
+    ? 'The rate climbs from zero to full over this many seconds, then holds. 0 = full rate from the first message.'
+    : 'Update SwitchProof on this PC to use a ramp-up.';
 
   const acq = $('acquiringInstitution').value || '—';
   $('defaultsSummary').textContent = `${acq} · ${$('terminalId').value || '—'} · ${ccyLabel(resolveCcy($('currencyCode').value)) || $('currencyCode').value}`;
@@ -866,7 +1188,7 @@ function refreshSummaries() {
   // Follow-ups are extra messages on the same connections: up to one per approved money-moving execution.
   const followShare = mode === 'bundle' ? bundle.filter(b => b.then !== 'NONE').reduce((x, b) => x + b.weight, 0) / bundleTotal() : 0;
   const followPart = followShare ? ` · up to ${Math.round(count * followShare)} follow-ups` : '';
-  $('fireSummary').innerHTML = `<b>${escapeHtml(at.name)}</b> → ${escapeHtml(t ? t.name : '—')}<br>${count} tx over ${dur || 0}s · ${$('concurrency').value || 1} parallel${followPart}${rowsPart}`;
+  $('fireSummary').innerHTML = `<b>${escapeHtml(at.name)}</b> → ${escapeHtml(t ? t.name : '—')}<br>${count} tx over ${dur || 0}s${ramp ? ` · ${ramp}s ramp-up` : ''} · ${$('concurrency').value || 1} at once${followPart}${rowsPart}`;
 }
 
 // ---------- Run ----------
@@ -890,7 +1212,8 @@ $('startBtn').addEventListener('click', async () => {
     mix: mode === 'bundle' ? bundle.map(b => ({ type: b.type, weight: Number(b.weight) || 1, then: b.then, source: b.source || undefined })) : undefined,
     source: mode === 'bundle' ? undefined : ($('srcPick').value || undefined),
     count: Number($('count').value) || 1,
-    durationSeconds: Number($('duration').value) || 0,
+    durationSeconds: Math.floor(Number($('duration').value) || 0),
+    rampSeconds: Math.min(Math.max(0, Math.floor(Number($('rampSeconds').value) || 0)), Math.floor(Number($('duration').value) || 0)),
     concurrency: Number($('concurrency').value) || 1,
     amount: $('amount').value,
     currencyCode: defCcy,
@@ -931,8 +1254,10 @@ $('cancelBtn').addEventListener('click', async () => {
 function setStatus(cls, text) { const p = $('statusPill'); p.className = 'status ' + cls; p.textContent = text; }
 
 function resetMonitor() {
-  ['stSent', 'stCompleted', 'stApproved', 'stDeclined', 'stErrors', 'stThroughput', 'stAvgLatency'].forEach(id => $(id).textContent = '0');
-  $('stMinMax').textContent = '0 / 0';
+  ['stSent', 'stCompleted', 'stApproved', 'stDeclined', 'stErrors', 'stThroughput', 'stP50', 'stP95', 'stP99', 'stMax'].forEach(id => $(id).textContent = '0');
+  $('paceNote').hidden = true;
+  paceFixed = null;
+  agentSeries = [];
   $('progressFill').style.width = '0%';
   $('progressText').textContent = 'starting…';
   $('codeBars').innerHTML = '<div class="muted small">No responses yet</div>';
@@ -952,7 +1277,7 @@ async function poll() {
   if (!currentJobId) return;
   let d;
   try {
-    const res = await apiFetch('/api/status?id=' + encodeURIComponent(currentJobId));
+    const res = await apiFetch('/api/status?id=' + encodeURIComponent(currentJobId) + '&series=1');
     d = await res.json();
   } catch (e) { return; }
 
@@ -962,8 +1287,14 @@ async function poll() {
   $('stDeclined').textContent = d.declined;
   $('stErrors').textContent = d.errors;
   $('stThroughput').textContent = d.throughputPerSec;
-  $('stAvgLatency').textContent = d.avgLatencyMs;
-  $('stMinMax').textContent = d.minLatencyMs + ' / ' + d.maxLatencyMs;
+  // Answer times as percentiles (request to reply). An older agent only has the slowest.
+  const lat = d.latency || {};
+  const answered = lat.count > 0;   // nothing answered yet (or at all): no times to show
+  $('stP50').textContent = answered ? lat.p50 : '—';
+  $('stP95').textContent = answered ? lat.p95 : '—';
+  $('stP99').textContent = answered ? lat.p99 : '—';
+  $('stMax').textContent = answered ? lat.max : d.latency ? '—' : d.maxLatencyMs;
+  renderPace(d);
 
   const pct = d.count > 0 ? Math.min(100, Math.round(d.completed / d.count * 100)) : 0;
   $('progressFill').style.width = pct + '%';
@@ -978,6 +1309,21 @@ async function poll() {
     series.push({ t: now, tps: 0, lat: d.avgLatencyMs });
   }
   lastPoll = { t: now, completed: d.completed };
+  // The agent's own timeline: what was sent and how long answers took in each stretch (a second, or wider for a
+  // long run). The stretch still filling up is left out while the run goes on. Older agents don't send it.
+  if (d.series && d.series.points) {
+    const step = d.series.stepSeconds || 1;
+    const pts = d.status === 'RUNNING' ? d.series.points.slice(0, -1) : d.series.points;
+    agentSeries = pts.map(p => ({ t: (p[0] + step / 2) * 1000, tps: p[1] / step, lat: p[6], from: p[0], sent: p[1] }));
+    if (d.status !== 'RUNNING') {
+      // Once the run is over: the last stretches hold only late answers, nothing sent. Left in, the line would dive to zero.
+      while (agentSeries.length > 1 && agentSeries[agentSeries.length - 1].tps === 0) agentSeries.pop();
+      // And the stretch the run ended in is shorter than the others: its rate is what was sent over the time it lasted.
+      const last = agentSeries[agentSeries.length - 1];
+      const lasted = d.elapsedMs / 1000 - last.from;
+      if (last && lasted > 0.2 && lasted < step) { last.tps = last.sent / lasted; last.t = (last.from + lasted / 2) * 1000; }
+    }
+  }
   drawChart();
 
   renderCodes(d.responseCodeCounts || {}, d.completed);
@@ -1037,11 +1383,11 @@ function renderErrors(d) {
     hint = `<li class="err-hint">Not one message got a reply, so this isn't about concurrency.
        ${['80', '443', '8080', '8443'].includes(port) ? `Port ${port} is usually a web port. If a load balancer (such as HAProxy) listens there and passes traffic to the switch, it must pass plain TCP (HAProxy: mode tcp), not HTTP; try the switch's own address and port directly to compare. ` : ''}
        Check the target's address and port, the message framing the switch expects (a 2-byte or 4-digit length header, any message header;
-       set in agent.properties in your SwitchProof folder), and that the switch accepts connections from this PC's IP address.
-       Send a single message (concurrency 1) after each change.</li>`;
+       set in the target's message format, or in agent.properties in your SwitchProof folder), and that the switch accepts connections from this PC's IP address.
+       Send a single message (1 at once) after each change.</li>`;
   } else if (dropped && d.concurrency > 1) {
     hint = `<li class="err-hint">The switch accepted ${dropped === 1 ? 'a connection' : dropped + ' connections'} and dropped ${dropped === 1 ? 'it' : 'them'} without a reply.
-       This usually means it takes fewer simultaneous connections than your concurrency of ${d.concurrency}: try a lower concurrency.
+       This usually means it takes fewer simultaneous connections than the ${d.concurrency} you run at once: try fewer at once.
        Dropped messages are listed in Recent transactions with their RRN, so you can check on the switch whether any were processed.</li>`;
   }
   $('errorList').innerHTML = hint + entries.map(([m, n]) => `<li><b class="err-n">${n}×</b> ${escapeHtml(m)}</li>`).join('');
@@ -1060,8 +1406,44 @@ function renderKinds(kinds) {
     <td class="num${k.declined ? ' t-bad' : ''}">${k.declined}</td>
     <td class="num${k.errors ? ' t-warn' : ''}">${k.errors}</td>
     <td class="num">${k.avgLatencyMs}</td>
+    <td class="num">${k.p95LatencyMs != null ? k.p95LatencyMs : '—'}</td>
   </tr>`).join('');
 }
+
+/**
+ * A paced run that ran out of free connections: the answer times shown are the switch's own, but messages left
+ * later than they were due, so the rate asked for was not reached. Says so, and offers the "at once" that fits.
+ */
+let paceFixed = null;   // the "at once" taken from the note; the confirmation stays until the next run
+const fmtDur = (ms) => (ms == null ? '—' : ms >= 10000 ? Math.round(ms / 1000) + ' s' : ms >= 1000 ? (ms / 1000).toFixed(1) + ' s' : ms + ' ms');
+function renderPace(d) {
+  if (paceFixed) return;
+  const p = d.pace;
+  // Not while only a handful are in: the first messages of any run wait a moment while connections open.
+  // And not when nothing was answered: then the errors are the story, not the pace.
+  const answered = d.latency && d.latency.count > 0;
+  if (!p || p.kept !== false || !answered || (d.status === 'RUNNING' && d.completed < 20)) { $('paceNote').hidden = true; return; }
+  const late = p.late || 0, waited = p.waited || {}, due = p.dueToReply || {};
+  $('paceText').textContent = (late
+    ? `Not sent at the pace asked: ${late.toLocaleString('en-US')} message${late === 1 ? '' : 's'} left over a second late.`
+    : `Not sent at the pace asked: messages waited up to ${fmtDur(waited.max)} for a free connection.`)
+    + (due.count > 0 ? ` From due to reply, 95% took ${fmtDur(due.p95)}.` : '');
+  $('paceFix').hidden = !p.suggestedConcurrency;
+  $('paceFix').textContent = `Use ${p.suggestedConcurrency} at once`;
+  $('paceFix').dataset.n = p.suggestedConcurrency || '';
+  $('paceNote').className = 'pace-note';
+  $('paceNote').hidden = false;
+}
+$('paceFix').addEventListener('click', () => {
+  const n = Number($('paceFix').dataset.n);
+  if (!n) return;
+  $('concurrency').value = n;
+  refreshSummaries();
+  paceFixed = n;
+  $('paceText').textContent = `Set to ${n} at once. Run again to keep the pace.`;
+  $('paceFix').hidden = true;
+  $('paceNote').className = 'pace-note ok';
+});
 
 // F54 balances from a reply: "ledger 9,899,514.85 · available 6,818,704.22"
 const fmtAmt = (v) => Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1103,6 +1485,10 @@ function renderResults(rows) {
 // ---------- Chart ----------
 function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 
+// The agent's timeline once it has a few points; before that (and for runs of a second or two) the points from the polls.
+// A function declaration on purpose: the chart is first drawn while this file is still loading (applyTheme).
+function chartPoints() { return agentSeries.length >= 3 ? agentSeries : series; }
+
 function drawChart() {
   const canvas = $('chart');
   if (!canvas) return;
@@ -1113,6 +1499,7 @@ function drawChart() {
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
+  const series = chartPoints();
   $('chartEmpty').hidden = series.length > 1;
   if (series.length < 2) return;
 
@@ -1423,10 +1810,12 @@ function showView(v) {
   $('viewUat').hidden = v !== 'uat';
   $('viewStandin').hidden = v !== 'standin';
   $('viewSetup').hidden = v !== 'setup';
+  $('viewSim').hidden = v !== 'sim';
   store.set('view', v);
   if (v === 'uat') { loadCases(); loadRunHistory(); }
   else if (v === 'standin') { siTargetLine(); siPlanLine(); siLoadHistory(); siPoll(); }
   else if (v === 'setup') stLoad();
+  else if (v === 'sim') setTimeout(() => SIM.load());   // SIM is defined at the end of this file: the view may be restored before
   else drawChart();
 }
 document.querySelector('.views').addEventListener('click', (e) => { const b = e.target.closest('.view-tab'); if (b) showView(b.dataset.view); });
@@ -2746,6 +3135,11 @@ function uatMoney(s, targetId) {
   const mark = st === 'PASS' ? '✓' : st === 'FAIL' ? '✗' : st === 'WAIT' ? '⏳ not posted yet' : st === 'PENDING' ? 'checking…' : '?';
   const note = st === 'FAIL' || st === 'ERROR' || st === 'WAIT' ? ' ' + escapeHtml(s.money.headline || '')
     : s.money.note ? ` <span class="warn-t">⚠ ${escapeHtml(s.money.headline || '')}</span>` : '';
+  // Read by balance inquiry: there is no database trail to open, so every check is in the tooltip.
+  if (s.money.via === 'balance') {
+    const all = (s.money.checks || []).map(c => (c.ok === true ? '✓ ' : c.ok === false ? '✗ ' : '· ') + c.text).join('\n');
+    return `<div class="sub money-line"><span class="pill ${cls}" title="${escapeHtml(all)}">balance ${mark}</span>${note}</div>`;
+  }
   return `<div class="sub money-line"><button type="button" class="pill ${cls} mt-link" data-rrn="${escapeHtml(s.rrn || '')}" data-target="${escapeHtml(targetId || '')}" title="${escapeHtml(s.money.headline || '')}">money ${mark}</button>${note}</div>`;
 }
 
@@ -2789,12 +3183,23 @@ async function openDbDialog(t) {
   $('dbSchema').value = v.schema || '';
   $('dbUser').value = v.user || '';
   $('dbPass').value = '';
-  $('dbPass').placeholder = v.hasPassword ? 'saved · leave blank to keep' : '';
+  $('dbPass').placeholder = dbPassHint(v);
+  if (v.passwordKept === 'locked') { $('dbMsg').className = 'fb-msg bad'; $('dbMsg').textContent = 'The saved password was protected by another Windows user or PC. Enter it again.'; }
   $('dbMode').value = v.moneyCheck || 'report';
   $('dbRemove').hidden = !v.configured;
   $('dbDriverMsg').textContent = '';
   renderDriver(v);
   if (!can('money')) { $('dbMsg').className = 'fb-msg bad'; $('dbMsg').textContent = 'Money checks are part of the Enterprise plan.'; }
+}
+
+/**
+ * What the password box says about the saved password (the agent never sends the password itself back).
+ * passwordKept: saved = on this PC, protected by the Windows account; session = in memory until the agent closes;
+ * locked = saved by another Windows user or PC, so it can't be used here.
+ */
+function dbPassHint(v) {
+  const kept = v.passwordKept || (v.hasPassword ? 'saved' : 'none');   // older agents only say hasPassword
+  return { saved: 'saved · leave blank to keep', session: 'kept until SwitchProof closes', locked: 'enter it again' }[kept] || '';
 }
 
 /** Which Oracle JDBC driver the agent uses and where it came from; the path box opens when none is found. */
@@ -2852,9 +3257,10 @@ $('dbForm').addEventListener('submit', async (e) => {
   try {
     bankDb[dbFor.id] = await targetsApi('/api/bankdb', dbFormValues());
     $('dbPass').value = '';
-    $('dbPass').placeholder = bankDb[dbFor.id].hasPassword ? 'saved · leave blank to keep' : '';
+    $('dbPass').placeholder = dbPassHint(bankDb[dbFor.id]);
     $('dbRemove').hidden = false;
-    $('dbMsg').className = 'fb-msg ok'; $('dbMsg').textContent = 'saved';
+    $('dbMsg').className = 'fb-msg ok';
+    $('dbMsg').textContent = bankDb[dbFor.id].passwordKept === 'session' ? 'saved · the password is kept until SwitchProof closes' : 'saved';
     renderTargets();
   } catch (err) { $('dbMsg').className = 'fb-msg bad'; $('dbMsg').textContent = err.message; }
 });
@@ -3661,6 +4067,7 @@ function renderPlan() {
   $('stLock').hidden = can('setup');
   $('stRead').disabled = !can('setup');
   $('bundleLock').hidden = can('bundles') || mode !== 'bundle';
+  setTimeout(() => SIM.lock());
   const lim = license.limits || {};
   $('freeLimits').hidden = can('unlimited');
   $('freeLimits').textContent = `Free: up to ${lim.count} per run, ${lim.concurrency} at once`;
@@ -5436,3 +5843,218 @@ const REFERRALS = (() => {
   $('refList').addEventListener('click', adminAct);
   return { load, adminLoad };
 })();
+
+// ---------- Simulator: SwitchProof answers as the switch or issuer ----------
+// Three steps on the left (listen, answers, balances), what it receives on the right. Settings can only change
+// while it is stopped; the agent refuses otherwise.
+const SIM = (() => {
+  let rules = [], editing = -1, running = false, timer = null;
+  const radio = (name) => (document.querySelector(`input[name="${name}"]:checked`) || {}).value;
+  const setRadio = (name, v) => { const r = document.querySelector(`input[name="${name}"][value="${v}"]`); if (r) r.checked = true; };
+  const msg = (text, kind) => { $('simMsg').textContent = text || ''; $('simMsg').className = 'fb-msg ' + (kind || ''); };
+
+  function fill(c) {
+    $('simPort').value = c.port;
+    setRadio('simListen', c.listen);
+    $('simProfile').innerHTML = profiles.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
+    $('simProfile').value = c.profile;
+    $('simKeep').checked = !!c.keepBalances;
+    $('simOpening').value = c.openingBalance;
+    $('simCcy').value = c.currency;
+    rules = (c.rules || []).map(r => Object.assign({}, r));
+    renderRules();
+  }
+
+  function collect() {
+    return {
+      port: Number($('simPort').value) || 0, listen: radio('simListen'), profile: $('simProfile').value,
+      keepBalances: $('simKeep').checked, openingBalance: $('simOpening').value.trim().replace(/,/g, ''), currency: $('simCcy').value.trim(),
+      delayMs: 0, rules,
+    };
+  }
+
+  function summary(r) {
+    const parts = [];
+    if (r.cls) parts.push(r.cls);
+    if (r.proc) parts.push('code ' + r.proc + '…');
+    if (r.bin) parts.push('card ' + r.bin + '…');
+    if (r.account) parts.push('account …' + r.account.slice(-4));
+    if (r.minAmount && r.maxAmount) parts.push(`amount ${r.minAmount} to ${r.maxAmount}`);
+    else if (r.minAmount) parts.push(`amount ${r.minAmount} and up`);
+    else if (r.maxAmount) parts.push(`amount up to ${r.maxAmount}`);
+    if (Number(r.delayMs)) parts.push(Number(r.delayMs) >= 1000 ? Number(r.delayMs) / 1000 + ' s' : r.delayMs + ' ms');
+    return parts.length ? parts.join(' · ') : 'every message';
+  }
+
+  function renderRules() {
+    $('simRules').innerHTML = rules.length ? rules.map((r, i) => `<li>
+        <button type="button" class="sim-rule" data-i="${i}" title="Change this rule">
+          <span><b>${escapeHtml(r.name)}</b> <span class="sim-sub">· ${escapeHtml(summary(r))}</span></span>
+          ${r.noReply ? '<span class="warn-t">no reply</span>' : `<span class="pill code ${codeClass(r.code)}">${escapeHtml(r.code)}</span>`}
+        </button></li>`).join('')
+      : '<li class="sim-none">No rules: every message is approved.</li>';
+  }
+
+  function openRule(i) {
+    editing = i;
+    const r = i >= 0 ? rules[i] : { name: '', code: '05', cls: '', proc: '', bin: '', account: '', minAmount: '', maxAmount: '', delayMs: 0, noReply: false };
+    $('srName').value = r.name; $('srCode').value = r.code; $('srCls').value = r.cls; $('srProc').value = r.proc; $('srBin').value = r.bin;
+    $('srAccount').value = r.account; $('srMin').value = r.minAmount; $('srMax').value = r.maxAmount;
+    $('srDelay').value = Number(r.delayMs) || ''; $('srNoReply').checked = !!r.noReply;
+    $('srDelete').hidden = i < 0; $('srMsg').textContent = '';
+    $('simRuleForm').hidden = false; $('simAddRule').hidden = true;
+    $('srName').focus();
+  }
+  function closeRule() { editing = -1; $('simRuleForm').hidden = true; $('simAddRule').hidden = false; }
+
+  $('simAddRule').addEventListener('click', () => openRule(-1));
+  $('simRules').addEventListener('click', (e) => { const b = e.target.closest('.sim-rule'); if (b && !running) openRule(Number(b.dataset.i)); });
+  $('srCancel').addEventListener('click', closeRule);
+  $('srDelete').addEventListener('click', () => { if (editing >= 0) rules.splice(editing, 1); closeRule(); renderRules(); });
+  $('srSave').addEventListener('click', () => {
+    const r = {
+      name: $('srName').value.trim() || `Rule ${editing >= 0 ? editing + 1 : rules.length + 1}`, code: $('srCode').value.trim() || '05',
+      cls: $('srCls').value.trim(), proc: $('srProc').value.trim(), bin: $('srBin').value.trim(), account: $('srAccount').value.trim(),
+      minAmount: $('srMin').value.trim().replace(/,/g, ''), maxAmount: $('srMax').value.trim().replace(/,/g, ''),
+      delayMs: Number($('srDelay').value) || 0, noReply: $('srNoReply').checked, on: true,
+    };
+    // The agent checks every rule when saving; the plain mistakes are caught here, next to the field.
+    const bad = !/^[0-9A-Za-z]{2,4}$/.test(r.code) ? 'The answer is a response code: 2 to 4 letters or digits.'
+      : r.cls && !/^\d{3}([ ,]+\d{3})*$/.test(r.cls) ? 'Message classes are 3 digits: 200, or 100 200.'
+      : [r.proc, r.bin, r.account].some(v => v && !/^\d+$/.test(v)) ? 'Processing code, card and account are digits.'
+      : [r.minAmount, r.maxAmount].some(v => v && isNaN(Number(v))) ? 'Amounts are numbers, such as 500.00.' : '';
+    if (bad) { $('srMsg').className = 'fb-msg bad'; $('srMsg').textContent = bad; return; }
+    if (editing >= 0) rules[editing] = r; else rules.push(r);
+    closeRule();
+    renderRules();
+  });
+
+  function render(s) {
+    running = !!s.running;
+    document.querySelectorAll('#simForm > fieldset').forEach(f => { f.disabled = running; });
+    if (running) closeRule();
+    $('simGo').textContent = running ? 'Stop simulator' : 'Start simulator';
+    $('simGo').classList.toggle('ghost', running);
+    $('simGo').classList.toggle('primary', !running);
+    $('simState').textContent = running ? 'Running' : 'Stopped';
+    $('simState').className = running ? 'sim-on' : '';
+    $('simCount').textContent = Number(s.received || 0).toLocaleString('en-US');
+    $('simConn').textContent = s.connections || 0;
+    const c = s.config || {};
+    $('simWhere').innerHTML = running
+      ? (c.listen === 'network'
+        ? `Listening on every network address of this PC, port <span class="mono">${c.port}</span>. Point your ATM, POS or switch at this PC.`
+        : `Point your ATM, POS or switch at <span class="mono">127.0.0.1:${c.port}</span> on this PC.`)
+      : (s.lastError ? `<span class="warn-t">${escapeHtml(s.lastError)}</span>` : '');
+    const log = s.recent || [];
+    $('simLog').innerHTML = log.length ? log.map(e => `<tr>
+        <td>${new Date(e.at).toLocaleTimeString('en-GB')}</td>
+        <td>${escapeHtml((e.mti || '') + ' ' + (e.proc || ''))}</td>
+        <td>${escapeHtml(e.pan || '')}</td>
+        <td>${escapeHtml(e.account || '')}</td>
+        <td class="num">${escapeHtml(e.amount || '')}</td>
+        <td class="muted">${e.problem ? `<span class="warn-t">${escapeHtml(e.problem)}</span>` : `<span class="pill code ${codeClass(e.code)}">${escapeHtml(e.code || '')}</span>`}${e.rule ? ' ' + escapeHtml(e.rule) : ''}</td>
+      </tr>`).join('')
+      : '<tr><td colspan="6" class="muted">Nothing yet. Start the simulator and point your ATM, POS or switch at it.</td></tr>';
+    const bal = Object.entries(s.balances || {});
+    $('simBalBox').hidden = !bal.length;
+    $('simBal').innerHTML = bal.map(([a, v]) => `<tr><td>${escapeHtml(a)}</td><td class="num">${escapeHtml(v.split(' / ').map(n => fmtAmt(n)).join(' / '))}</td></tr>`).join('');
+  }
+
+  async function load() {
+    try {
+      const s = await targetsApi('/api/sim');
+      if (!running || !s.running) fill(s.config);
+      render(s);
+      clearTimeout(timer);
+      if (s.running && !$('viewSim').hidden) timer = setTimeout(load, 1500);
+    } catch (e) { msg(/Unknown|404|not found|Unexpected token/i.test(e.message) ? 'Update SwitchProof on this PC to use the simulator.' : e.message, 'bad'); }
+  }
+
+  $('simForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    msg('');
+    try {
+      if (running) {
+        render(await targetsApi('/api/sim/stop', {}));
+        clearTimeout(timer);
+        return;
+      }
+      if (!$('simRuleForm').hidden) { $('srMsg').className = 'fb-msg bad'; $('srMsg').textContent = 'Keep or cancel this rule first.'; return; }
+      await targetsApi('/api/sim', { config: collect() });
+      render(await targetsApi('/api/sim/start', {}));
+      load();
+    } catch (err) { msg(err.message, 'bad'); }
+  });
+
+  function lock() {
+    const ok = can('simulator');
+    $('simLock').hidden = ok;
+    document.querySelector('.view-tab[data-view="sim"]').classList.toggle('locked', !ok);
+  }
+
+  return { load, lock };
+})();
+
+// ---------- Security: PIN, chip data and MAC a target sends (test keys only) ----------
+// The switches write the target settings pin / pinFormat / chip / mac, which save like the other settings.
+// The two keys go to the agent on their own and never come back: only their check value is shown.
+function secSet(id, value) {
+  if ($(id).value === value) return;
+  $(id).value = value;
+  $(id).dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function secShow() {
+  $('secPinBody').hidden = !$('secPinOn').checked;
+  $('secMacBody').hidden = !$('secMacOn').checked;
+}
+
+function secKeys(view) {
+  [['Pin', 'pin'], ['Mac', 'mac']].forEach(([K, k]) => {
+    const v = (view && view[k]) || { state: 'none' };
+    const have = !!v.kcv;
+    $(`sec${K}Have`).hidden = !have;
+    $(`sec${K}New`).hidden = have;
+    $(`sec${K}Kcv`).textContent = v.kcv || '';
+    $(`sec${K}State`).textContent = !have ? '' : v.state === 'session' ? 'kept until SwitchProof closes' : `${v.length}-length key saved`;
+    $(`sec${K}Input`).value = '';
+    if (v.state === 'locked') $('secMsg').textContent = 'A key saved under another Windows account can\'t be opened here. Save it again.';
+  });
+}
+
+async function secFill(t) {
+  const d = t.defaults || {};
+  $('secPinOn').checked = !!d.pin;
+  $('secChipOn').checked = d.chip === 'on';
+  $('secMacOn').checked = !!d.mac && d.mac !== 'off';
+  if ($('secMacOn').checked) $('secMacAlg').value = d.mac;
+  $('secMsg').textContent = '';
+  secShow();
+  try {
+    secKeys(await targetsApi('/api/targets/keys?id=' + encodeURIComponent(t.id)));
+    $('secBox').hidden = false;
+  } catch (e) { $('secBox').hidden = true; }   // an agent from before this: no box
+}
+
+$('secPinOn').addEventListener('change', () => { if (!$('secPinOn').checked) secSet('pin', ''); secShow(); if ($('secPinOn').checked) $('pin').focus(); });
+$('secChipOn').addEventListener('change', () => secSet('chip', $('secChipOn').checked ? 'on' : 'off'));
+$('secMacOn').addEventListener('change', () => { secSet('mac', $('secMacOn').checked ? $('secMacAlg').value : 'off'); secShow(); });
+$('secMacAlg').addEventListener('change', () => { if ($('secMacOn').checked) secSet('mac', $('secMacAlg').value); });
+
+[['Pin', 'pinKey'], ['Mac', 'macKey']].forEach(([K, field]) => {
+  const send = async (value) => {
+    const msg = $('secMsg');
+    msg.className = 'fb-msg'; msg.textContent = '';
+    try { secKeys(await targetsApi('/api/targets/keys', { id: filledFor, [field]: value })); }
+    catch (e) { msg.className = 'fb-msg bad'; msg.textContent = e.message; }
+  };
+  $(`sec${K}Save`).addEventListener('click', () => {
+    const v = $(`sec${K}Input`).value.trim();
+    if (!v) { $('secMsg').className = 'fb-msg bad'; $('secMsg').textContent = 'Paste the key first.'; return; }
+    send(v);
+  });
+  $(`sec${K}Input`).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $(`sec${K}Save`).click(); } });
+  $(`sec${K}Change`).addEventListener('click', () => { $(`sec${K}Have`).hidden = true; $(`sec${K}New`).hidden = false; $(`sec${K}Input`).focus(); });
+  $(`sec${K}Remove`).addEventListener('click', () => send(''));
+});
