@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Help and guide · SwitchProof</title>
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="description" content="How to use SwitchProof: install and connect, add your switch, load tests, UAT test cases and evidence, the simulator, stand-in rehearsals, switch setup, PIN and MAC, the command line, plans, troubleshooting and response codes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=20261112140401">
+<script>try { var t = JSON.parse(localStorage.getItem('ss.theme')); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
+</head>
+<body class="doc-page">
+
+<header class="doc-top"><div class="doc-top-in">
+  <a class="doc-brand" href="./"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="2"/><path d="M6 15.5l3.5-6 3 4.5 2.2-3.2L18 15.5"/></svg>SwitchProof</a>
+  <nav class="doc-nav" aria-label="SwitchProof">
+    <a href="help.html" aria-current="page">Help</a><a href="formats.html">Formats</a><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a><a href="./">Sign in</a>
+  </nav>
+</div></header>
+
+<div class="hp">
+<details class="hp-toc" open>
+  <summary>Topics</summary>
+  <nav aria-label="Help topics">
+    <div class="hp-grp"><p>Start</p>
+      <a href="#start">Start here</a><a href="#install">Install</a><a href="#connect">Sign in and connect</a><a href="#target">Add your switch</a><a href="#first-test">First test</a>
+    </div>
+    <div class="hp-grp"><p>Screens</p>
+      <a href="#load">Load test</a><a href="#results">Load test results</a><a href="#open">Open transactions</a><a href="#uat">UAT test cases</a><a href="#uat-run">Running UAT</a><a href="#sim">Simulator</a><a href="#standin">Stand-in</a><a href="#setup">Switch setup</a>
+    </div>
+    <div class="hp-grp"><p>Settings</p>
+      <a href="#settings">Target settings</a><a href="#sources">Sources</a><a href="#types">Your own types</a><a href="#security">PIN, chip data, MAC</a><a href="#formats">Message formats</a><a href="#money">Money checks</a>
+    </div>
+    <div class="hp-grp"><p>More</p>
+      <a href="#cli">Command line</a><a href="#account">Plans and account</a><a href="#data">Your data</a><a href="#trouble">Troubleshooting</a><a href="#codes">Response codes</a><a href="#glossary">Glossary</a>
+    </div>
+  </nav>
+</details>
+
+<main class="doc hp-main">
+  <h1>Help and guide</h1>
+  <p class="doc-meta">Every screen and setting in SwitchProof, with examples</p>
+  <div class="hp-search">
+    <input type="search" id="hpQ" placeholder="Search help: timeout, PIN, 96, ramp-up" aria-label="Search help" autocomplete="off">
+  </div>
+  <p class="hp-none" id="hpNone" hidden>No topic matches. Try another word, or write to <a href="mailto:support@switchproof.online">support@switchproof.online</a>.</p>
+
+  <!-- ================= Start ================= -->
+  <section class="hp-sec" id="start" data-k="overview introduction what is getting started begin">
+    <h2>Start here</h2>
+    <p>SwitchProof tests your card switch with real ISO 8583 messages. The console runs in this browser. <b>SwitchProof for Windows</b>, on a PC inside your network, sends the messages and keeps your data.</p>
+    <ol class="hp-start">
+      <li><a href="#install"><span class="hp-n">1</span><b>Install</b><span>SwitchProof for Windows</span></a></li>
+      <li><a href="#connect"><span class="hp-n">2</span><b>Connect</b><span>Pair it with this site</span></a></li>
+      <li><a href="#target"><span class="hp-n">3</span><b>Add your switch</b><span>Host, port, format</span></a></li>
+      <li><a href="#first-test"><span class="hp-n">4</span><b>First test</b><span>A sign-on, then a balance</span></a></li>
+    </ol>
+  </section>
+
+  <section class="hp-sec" id="install" data-k="download installer setup exe windows smartscreen protected update upgrade version">
+    <h2>Install SwitchProof</h2>
+    <ol class="hp-steps">
+      <li>Sign in at switchproof.online on a PC that can reach your switch (bank network or VPN).</li>
+      <li>Download <b>SwitchProof-Setup.exe</b>: about 35 MB, Java included, no admin rights needed.</li>
+      <li>Run it. If Windows shows <i>Windows protected your PC</i>, choose <b>More info</b>, then <b>Run anyway</b>.</li>
+      <li>SwitchProof starts by itself and opens this site. Keep its window open while you test.</li>
+    </ol>
+    <table class="doc-tbl">
+      <tbody>
+        <tr><td>Start it again</td><td>From the Start menu or the desktop</td></tr>
+        <tr><td>The program</td><td><code>%LOCALAPPDATA%\SwitchProof</code></td></tr>
+        <tr><td>Your data</td><td><code>%USERPROFILE%\SwitchProof</code>: see <a href="#data">Your data</a></td></tr>
+      </tbody>
+    </table>
+    <h3 id="update">Updating</h3>
+    <p>When a new version is out, <b>Update SwitchProof</b> appears in the account menu. Run the installer it downloads: it closes SwitchProof, updates it and starts it again. Your targets, test cases and evidence are kept. If this site needs a newer version than yours, it shows <b>Update SwitchProof</b> before anything else and carries on by itself once the new one is running.</p>
+  </section>
+
+  <section class="hp-sec" id="connect" data-k="sign in login password pair pairing code allow local network loopback blocked agent not answering disconnect">
+    <h2>Sign in and connect</h2>
+    <ol class="hp-steps">
+      <li>Sign in with your email, or <b>Create an account</b>.</li>
+      <li>On <b>Connect your agent</b>, press <b>Connect</b>. If the browser asks whether this site can reach apps on this device, choose <b>Allow</b>.</li>
+      <li>The console opens. Your switch shows top right, under <b>Target</b>.</li>
+    </ol>
+    <h3>If something goes wrong</h3>
+    <dl class="hp-fix">
+      <dt>Your browser is blocking this page</dt><dd>Click the icon left of the address, then <b>Site settings</b>. Set <b>Loopback network</b> to <b>Allow</b>, come back and press <b>Check again</b>. If your organisation manages the browser, ask IT to allow switchproof.online for local network access (Chrome and Edge policy <code>LocalNetworkAccessAllowedForUrls</code>).</dd>
+      <dt>SwitchProof isn't answering</dt><dd>Open SwitchProof from the Start menu, then try again.</dd>
+      <dt>Connect doesn't find it</dt><dd>Open <b>Pair manually</b>: the agent address (<code>http://127.0.0.1:8787</code> on the same PC) and the pairing code shown in the SwitchProof window.</dd>
+      <dt>Forgot your password</dt><dd><b>Forgot password?</b> on the sign-in page emails a link. A link works once and expires: ask for a new one if it says so.</dd>
+      <dt>Pair with another PC</dt><dd>Account menu, <b>Disconnect agent</b>, then connect again.</dd>
+    </dl>
+  </section>
+
+  <section class="hp-sec" id="target" data-k="target switch host ip port add edit remove test reachable targets.json environment uat production">
+    <h2>Add your switch</h2>
+    <p>A <b>target</b> is one switch: its address, port and message format. Keep one per environment, such as UAT and production.</p>
+    <ol class="hp-steps">
+      <li>Click <b>Target</b>, top right.</li>
+      <li>Fill in <b>Name</b>, <b>IP / host</b> and <b>Port</b>.</li>
+      <li>Pick the <b>Message format</b> your switch speaks: see <a href="#formats">Message formats</a>.</li>
+      <li>Press <b>Test</b>. It shows <i>reachable</i> and how long the connection took, or why it failed.</li>
+      <li>Press <b>Add target</b>, then click it in the list to use it.</li>
+    </ol>
+    <table class="doc-tbl">
+      <thead><tr><th>Setting</th><th>What it is</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td>Name</td><td>What you call this switch</td><td>UAT switch</td></tr>
+        <tr><td>IP / host</td><td>The switch's address, as this PC reaches it</td><td>10.20.30.40</td></tr>
+        <tr><td>Port</td><td>The port the switch listens on for acquirer traffic</td><td>2100</td></tr>
+        <tr><td>Message format</td><td>How the switch writes ISO 8583</td><td>FLEXCUBE (ISO 8583:1987)</td></tr>
+      </tbody>
+    </table>
+    <figure class="hp-fig"><img src="help-target.webp" width="520" height="381" loading="lazy" alt="The Switch targets list with one target, UAT switch at 127.0.0.1 port 8592, and the form to add a target: name, IP or host, port and message format."><figcaption>The target list, top right. Test data throughout this guide.</figcaption></figure>
+    <p>Each target in the list has buttons to <b>test</b> its connection, set up its <b>bank database</b> (<a href="#money">Money checks</a>), <b>edit</b> it or <b>remove</b> it. Each target also keeps its own <a href="#settings">settings</a>, <a href="#sources">sources</a>, <a href="#security">keys</a> and <a href="#roles">account roles</a>: switching target switches all of them.</p>
+  </section>
+
+  <section class="hp-sec" id="first-test" data-k="first test sign on signon 0800 0810 echo balance inquiry try">
+    <h2>Send a first test</h2>
+    <ol class="hp-steps">
+      <li><b>Load test</b>, step 01: pick <b>Sign On</b>. It needs no account.</li>
+      <li>Step 03: set <b>Executions</b> to 1.</li>
+      <li>Press <b>Run test</b>. A working switch answers with a network response (0810): <i>Approved 1</i>.</li>
+      <li>Now pick <b>Balance Inquiry</b>, paste one test account under step 02, and run again.</li>
+    </ol>
+    <p>No answer? See <a href="#trouble">Troubleshooting</a>.</p>
+  </section>
+
+  <!-- ================= Screens ================= -->
+  <section class="hp-sec" id="load" data-k="load test performance stress tps throughput bundle preset balance-neutral atm day pos day data set csv rows executions over seconds ramp-up at once concurrency burst run abort">
+    <h2>Load test</h2>
+    <p>Send many messages at a set pace and see how your switch copes.</p>
+    <ol class="hp-steps">
+      <li><b>01 Transaction</b>: one type, or a <b>Bundle</b> that mixes several types in the shares you set. <b>Your types</b> adds your own (<a href="#types">Your own types</a>).</li>
+      <li><b>02 Data set</b>: the accounts to use, one row per message. Drop a CSV or paste rows. <b>Template</b> gives the columns for the type.</li>
+      <li><b>03 Load profile</b>: how many, and how fast.</li>
+      <li><b>04 Message defaults</b>: the amount, currency, terminal, institutions and card used when a row leaves them blank (<a href="#settings">Target settings</a>).</li>
+      <li>Press <b>Run test</b>. <b>Abort</b> stops it. Then read the <a href="#results">results</a>.</li>
+    </ol>
+    <h3 id="bundle">Bundles and presets <span class="hp-plan">Team</span></h3>
+    <p>Click types to add them to the bundle, set each one's share, and choose what follows an approval: <b>No follow-up</b>, <b>Reverse after approval</b> or <b>Settle after approval</b>. The presets fill a bundle for you:</p>
+    <table class="doc-tbl">
+      <tbody>
+        <tr><td>Balance-neutral</td><td>Every money-moving message is reversed straight after approval, so accounts end where they started</td></tr>
+        <tr><td>ATM day</td><td>Withdrawals, balance inquiries, mini statements and a few transfers</td></tr>
+        <tr><td>POS day</td><td>Purchases (settled), cash advances, offline purchases and refunds</td></tr>
+      </tbody>
+    </table>
+    <h3 id="data-set">Data set</h3>
+    <table class="doc-tbl">
+      <thead><tr><th>Type</th><th>Columns</th></tr></thead>
+      <tbody>
+        <tr><td>Withdrawal, purchase, refund, deposit, cash advance, offline purchase</td><td><code>from_account,amount,currency</code></td></tr>
+        <tr><td>Transfer, bill payment</td><td><code>from_account,to_account,amount,currency</code></td></tr>
+        <tr><td>Balance inquiry, mini statement</td><td><code>from_account</code></td></tr>
+        <tr><td>Sign on</td><td>None</td></tr>
+      </tbody>
+    </table>
+    <p>The header row is optional. Comma, semicolon or tab. Currency as <code>840</code> or <code>USD</code>. Example row: <code>000123456001,20.00,USD</code>.</p>
+    <h3 id="load-profile">Load profile</h3>
+    <table class="doc-tbl">
+      <thead><tr><th>Setting</th><th>What it does</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td>Executions</td><td>Messages in total</td><td>600</td></tr>
+        <tr><td>Over (seconds)</td><td>Spread them over this long. 0 = a burst, as fast as possible</td><td>60 = 10 a second</td></tr>
+        <tr><td>Ramp-up (seconds)</td><td>The rate climbs from zero to full over this long, then holds</td><td>10</td></tr>
+        <tr><td>At once</td><td>Messages waiting for their reply at the same moment. Each one is a connection to the switch</td><td>20</td></tr>
+        <tr><td>Match executions to uploaded rows</td><td>One message per row of the data set</td><td>On</td></tr>
+      </tbody>
+    </table>
+    <p>The rate you'll get shows next to the heading, such as <i>≈ 10 tx/s</i>. The Free plan runs up to 200 messages, 5 at once.</p>
+  </section>
+
+  <section class="hp-sec" id="results" data-k="results latency percentile p95 p99 median half slowest per second chart response codes errors recent transactions switch report pace not sent at the pace asked csv">
+    <h2>Load test results</h2>
+    <figure class="hp-fig"><img src="help-results.webp" width="740" height="705" loading="lazy" alt="Results of 300 withdrawals over 30 seconds: 270 approved, 30 declined, no errors, 10 a second, half within 38 ms, 95% within 47 ms, 99% within 53 ms, slowest 59 ms; the throughput chart; response codes 00 and 61."><figcaption>300 withdrawals against the simulator: 30 declined by one of its rules (61).</figcaption></figure>
+    <table class="doc-tbl">
+      <thead><tr><th>Tile</th><th>Means</th></tr></thead>
+      <tbody>
+        <tr><td>Sent · Completed</td><td>Messages sent, and those finished (answered or failed)</td></tr>
+        <tr><td>Approved · Declined</td><td>By the response code: see <a href="#codes">Response codes</a></td></tr>
+        <tr><td>Errors</td><td>No usable answer: see <a href="#errors">the kinds of error</a></td></tr>
+        <tr><td>Per second</td><td>Messages sent per second</td></tr>
+        <tr><td>Half within · 95% within · 99% within</td><td>Half, 95 and 99 of every 100 answers came within this time, from request to reply</td></tr>
+        <tr><td>Slowest</td><td>The slowest answer of the run</td></tr>
+      </tbody>
+    </table>
+    <p><b>Not sent at the pace asked</b> means SwitchProof itself ran short of free connections, so the switch isn't to blame for the slow pace. Press <b>Use N at once</b> (or raise <b>At once</b>) and run again.</p>
+    <table class="doc-tbl">
+      <tbody>
+        <tr><td>By transaction type</td><td>For a bundle: each type and its follow-ups, with their own counts and times</td></tr>
+        <tr><td>Throughput &amp; latency</td><td>Sent per second and answer time, second by second, for the whole run</td></tr>
+        <tr><td>Response codes</td><td>How many answers carried each code</td></tr>
+        <tr><td>Errors</td><td>Messages with no usable answer, by kind</td></tr>
+        <tr><td>Recent transactions</td><td>The newest 200, with type, RRN, accounts, amount, result and time</td></tr>
+        <tr><td>Switch report</td><td>Every request and response of the run, field by field</td></tr>
+        <tr><td>Money trail · Check money side</td><td>What each transaction did to the money: see <a href="#money">Money checks</a></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="hp-sec" id="open" data-k="open transactions settle completion 0220 reverse reversal 0400 authorization pending export csv remove">
+    <h2>Open transactions</h2>
+    <p>Approved financial transactions land here, below the results, so you can finish them.</p>
+    <ul>
+      <li><b>Settle</b> sends a completion (0220) for an authorization. The settle amount can differ from the authorized one.</li>
+      <li><b>Reverse</b> sends a reversal (0400) with the original RRN.</li>
+      <li><b>Select…</b> picks rows: all shown, authorizations, or those older than 15 minutes. Then <b>Settle selected</b> or <b>Reverse selected</b>.</li>
+      <li><b>Remove from list</b> drops rows without sending anything. <b>Export CSV</b> downloads the rows shown, or the selection.</li>
+      <li>Filter by type, RRN, account or approval code.</li>
+    </ul>
+  </section>
+
+  <section class="hp-sec" id="uat" data-k="uat test case cases new case import export template csv steps expect expected code roles @role account roles negative">
+    <h2>UAT test cases</h2>
+    <p>A test case is a short chain of steps, each with the answer you expect. Run cases against any target and keep the evidence.</p>
+    <ol class="hp-steps">
+      <li><b>UAT</b> tab, <b>+ New case</b>. Or <b>Import</b> a CSV: <b>Template</b> downloads the layout.</li>
+      <li>Give it a name and a scenario. A pre-condition and expected result are optional and appear on the report.</li>
+      <li>Add steps: <b>POS purchase</b>, <b>Withdrawal</b>, <b>Transfer</b>, <b>Balance</b>, <b>+ Settle</b>, <b>+ Reverse</b>.</li>
+      <li>For each step: the accounts, amount, currency and what to <b>Expect</b>.</li>
+      <li><b>Save case</b>.</li>
+    </ol>
+    <table class="doc-tbl">
+      <thead><tr><th>Expect</th><th>Passes when the answer is</th></tr></thead>
+      <tbody>
+        <tr><td><code>00</code></td><td>Approved</td></tr>
+        <tr><td><code>05,51</code></td><td>Any code in the list</td></tr>
+        <tr><td><code>!00</code></td><td>Any decline</td></tr>
+      </tbody>
+    </table>
+    <table class="doc-tbl">
+      <thead><tr><th>Step column</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>Settle amt · Of RRN</td><td>Settle and Reverse act on the latest approved step above them, or on the RRN you enter</td></tr>
+        <tr><td>Source</td><td>Whose card, which acquirer: see <a href="#sources">Sources</a></td></tr>
+        <tr><td>Card</td><td>A card number for this step only</td></tr>
+        <tr><td>Proc</td><td>A processing code for this step only</td></tr>
+        <tr><td>Remote</td><td>Sent with the target's remote acquirer (remote on-us)</td></tr>
+      </tbody>
+    </table>
+    <h3 id="roles">Account roles</h3>
+    <p>Write <code>@ROLE</code> instead of an account number, such as <code>@SAVINGS</code>. Each target maps a role to its own account (<b>Execute</b>, <b>Account roles for this target</b>), so the same cases run on UAT and production. Negative cases need an account prepared for them, such as one with a debit freeze.</p>
+    <h3 id="uat-csv">CSV layout</h3>
+    <p>One row per step; the case's own columns only on its first row. Importing a <code>case_id</code> that exists replaces that case.</p>
+    <pre class="doc-code">case_id,case_name,category,description,precondition,expected_result,step,action,from_account,to_account,amount,currency,settle_amount,of_rrn,card,remote,processing_code,expected_code,note
+TC-102,Transfer then reverse,,,,,1,TRANSFER,000123456001,000123456002,9.00,840,,,,,,00,
+TC-102,Transfer then reverse,,,,,2,REVERSAL,,,,,,,,,,00,</pre>
+  </section>
+
+  <section class="hp-sec" id="uat-run" data-k="run uat execute tester report pdf evidence csv bank sheet run history uat-runs pass fail check money again watermark">
+    <h2>Running UAT</h2>
+    <ol class="hp-steps">
+      <li>Tick cases on the left, or <b>All</b>. Filter by id, name or action.</li>
+      <li><b>Tester</b>: the name on the report.</li>
+      <li>Press <b>Run selected</b>. Each step shows the answer against what you expected: pass or fail.</li>
+    </ol>
+    <figure class="hp-fig"><img src="help-uat.webp" width="1280" height="900" loading="lazy" alt="The UAT screen: test cases on the left; on the right, a finished run with all 11 cases passed and one case opened to show each step's RRN, accounts, amount, expected code and actual code."><figcaption>Cases on the left; a finished run on the right, with one case opened to its steps.</figcaption></figure>
+    <table class="doc-tbl">
+      <tbody>
+        <tr><td>Open report</td><td>The printable report: print it to PDF for sign-off</td></tr>
+        <tr><td>Evidence CSV</td><td>Every step: message type, RRN, the code expected and the code received, time taken, and the money check</td></tr>
+        <tr><td>Bank sheet CSV</td><td>One row per case, in the bank's test-sheet columns</td></tr>
+        <tr><td>Check money again</td><td>FLEXCUBE can post minutes after the switch approves: look again now (<a href="#money">Money checks</a>)</td></tr>
+        <tr><td>Run history</td><td>Every run, saved in <code>uat-runs</code> in your data folder. Click one to open it</td></tr>
+      </tbody>
+    </table>
+    <p>The Free plan runs up to 10 cases at a time, and its reports carry a <i>Free</i> watermark.</p>
+  </section>
+
+  <section class="hp-sec" id="sim" data-k="simulator emulator pretend switch issuer host listen port rules answers decline delay timeout no reply balances atm pos test without host">
+    <h2>Simulator <span class="hp-plan">Team</span></h2>
+    <p>SwitchProof answers as the switch or the issuer, to test an ATM, a POS or a switch's own link without the real host.</p>
+    <ol class="hp-steps">
+      <li><b>Listen</b>: the port, and who may connect: <b>This PC</b> only, or <b>The network</b>. Pick the message format.</li>
+      <li><b>Answers</b>: add rules. The first rule that matches wins; anything else is approved.</li>
+      <li><b>Balances</b>: tick <b>Keep balances</b> to give every account an opening balance that moves with what is approved.</li>
+      <li>Press <b>Start simulator</b>, then point your ATM, POS or switch at this PC's address and the port.</li>
+    </ol>
+    <figure class="hp-fig"><img src="help-sim.webp" width="1280" height="829" loading="lazy" alt="The simulator running on port 8592 with one rule, Over the limit, answering 61; its log of withdrawals with their answers, and the balances it keeps for each account."><figcaption>The simulator answering a load test: one rule, and balances kept.</figcaption></figure>
+    <table class="doc-tbl">
+      <thead><tr><th>Rule setting</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td>Answer code</td><td><code>05</code></td></tr>
+        <tr><td>Message (100, 200 …)</td><td><code>200</code> = financial requests only</td></tr>
+        <tr><td>Processing code starts · Card starts</td><td><code>01</code> = withdrawals · <code>400000</code> = cards of that BIN</td></tr>
+        <tr><td>Account · Amount from / to</td><td>Only this account, or only amounts in this range</td></tr>
+        <tr><td>Delay ms</td><td><code>3000</code> = answer after 3 seconds</td></tr>
+        <tr><td>Don't reply at all</td><td>To test what your side does on a timeout</td></tr>
+      </tbody>
+    </table>
+    <p>Network messages (0800) are always approved. Advices and reversals are acknowledged unless a rule says otherwise. With balances kept, a debit beyond the available balance is declined (51), and each reply carries the balances in field 54. The log shows every message and its answer.</p>
+    <p>From a script: <code>switchproof-cli simulator</code> runs it with the same settings until stopped (<a href="#cli">Command line</a>).</p>
+  </section>
+
+  <section class="hp-sec" id="standin" data-k="stand-in standin cutover rehearsal migration queue release reconcile positive balance file pbf clearing go live legacy core new flexcube core">
+    <h2>Stand-in rehearsal <span class="hp-plan">Enterprise</span></h2>
+    <p>Rehearse a core banking cutover. The card switch runs in stand-in while no core is connected, then its queue goes to the New Flexcube Core. SwitchProof plays the switch through each step and reconciles every transaction, account and GL. Each step waits for you, as it would on the night.</p>
+    <ol class="hp-steps">
+      <li><b>Switch to stand-in</b>: days in stand-in, the stand-in limits, and whether accounts without a balance record are declined (91) or approved within the limits.</li>
+      <li><b>Positive balance file</b>: the Legacy Core's balances at the cut-off, as a CSV of <code>account,available_balance[,currency]</code>. Or take the New Flexcube Core's balances for the accounts you list, or skip.</li>
+      <li><b>Transactions at the switch</b>: how many withdrawals, purchases, pre-authorizations and transfers; how many are completed, reversed or sent twice; amounts; authorizations from before the cut-off; then <b>Post to the switch</b>.</li>
+      <li><b>Connect the New Flexcube Core</b>: a sign-on (0800) only.</li>
+      <li><b>Samples</b>: balance inquiries show whether the migrated balances match the file; the first advices show the queue posts.</li>
+      <li><b>Release the queue</b>: at most so many a second, how many in flight, and the time it must finish in.</li>
+      <li><b>Reconcile</b> runs by itself: every RRN, each account (before plus approved in stand-in equals after) and the switch's totals against the GLs.</li>
+      <li><b>Fully online</b>: the switch leaves stand-in. Balance inquiries check what customers now see.</li>
+      <li><b>Clearing</b>: the authorizations still open are cleared, by 0220 advices or a clearing file the bank loads. Or <b>Finish without clearing</b>.</li>
+    </ol>
+    <p>Reconciling reads the bank database, so set it up for the target first (<a href="#money">Money checks</a>). <b>Report</b> and <b>CSV</b> keep the evidence, <b>Problems only</b> filters the list, and <b>Rehearsals</b> lists earlier ones.</p>
+  </section>
+
+  <section class="hp-sec" id="setup" data-k="switch setup customize customization processing code literal product life cycle stages rules hooks charges pack change pack deploy sql backup commit review upload setup read setup">
+    <h2>Switch setup <span class="hp-plan">Enterprise</span></h2>
+    <p>See how the FLEXCUBE switch interface is set up for each processing code, and change it with a pack of scripts you review and run yourself. SwitchProof only reads the bank database; it never changes it.</p>
+    <ol class="hp-steps">
+      <li><b>Read setup</b>: SwitchProof reads this switch's setup from the bank database. Without a database connection, <b>Upload the setup</b>: run each SELECT shown in your SQL tool, save the result as CSV with headers, and upload it with the package files. The files stay on this PC.</li>
+      <li><b>Transaction</b>: pick a processing code from the list, or enter a new code and name.</li>
+      <li><b>Life cycle</b>: the product, which cards it applies to (on-us, remote on-us, off-us), the other side of the entry, and what you want at each stage (authorization, advice, completion, reversal, repeats). Add charges and your own <b>Rules</b>: <i>When</i> a hook runs, <i>If</i> conditions hold, <i>Then</i> an action.</li>
+      <li><b>Review</b>: before and after, and anything blocking.</li>
+      <li><b>Deploy</b>: <b>Build the pack</b> and download it (.zip). Tick off the checklist as you go: back up, compile and check VALID, change, check then COMMIT, test on UAT, <b>Re-check setup</b>.</li>
+    </ol>
+    <p><b>Sources</b> shows where the setup was read from: the packages, the tables, and traffic from the last 1, 7 or 30 days. Screen steps are listed for anyone who would rather make the change in the screens than run the change script.</p>
+  </section>
+
+  <!-- ================= Settings ================= -->
+  <section class="hp-sec" id="settings" data-k="target settings message defaults amount currency terminal acquiring institution forwarding f32 f33 f41 pan card remote acquirer rotate pans connection kept open echo tls certificate fingerprint pin timeout">
+    <h2>Target settings</h2>
+    <p>Under <b>04 Message defaults</b> on the Load test screen. They're saved per target, and UAT runs use them too.</p>
+    <table class="doc-tbl">
+      <thead><tr><th>Setting</th><th>What it does</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td>Default amount · currency</td><td>Used when a row leaves them blank</td><td>10.00 · 840</td></tr>
+        <tr><td>Terminal ID</td><td>Field 41</td><td>ATM1</td></tr>
+        <tr><td>Acquiring inst.</td><td>Field 32</td><td>100001</td></tr>
+        <tr><td>Forwarding inst.</td><td>Field 33. Blank = not sent</td><td></td></tr>
+        <tr><td>Card number (PAN)</td><td>Field 2: the test card</td><td>4000000000000002</td></tr>
+        <tr><td>Remote acquirer</td><td>Sent on UAT steps marked Remote (remote on-us)</td><td></td></tr>
+        <tr><td>Check balances in UAT runs</td><td>See <a href="#money">Money checks</a></td><td>Don't check</td></tr>
+        <tr><td>Rotate PANs</td><td>Cards to take turns, one per line. Overrides the card above</td><td></td></tr>
+        <tr><td>Sources</td><td>See <a href="#sources">Sources</a></td><td></td></tr>
+      </tbody>
+    </table>
+    <h3 id="connection">Connection to the switch</h3>
+    <table class="doc-tbl">
+      <thead><tr><th>Setting</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>Connections</td><td><b>One per message</b>: opened, used once, closed. <b>Kept open</b>: messages share connections that stay open, as an acquirer's link does; replies are matched by trace number</td></tr>
+        <tr><td>How many when kept open</td><td>Connections to keep. 1 for a switch that allows only one</td></tr>
+        <tr><td>Echo test seconds quiet</td><td>An echo test (0800) on a kept-open connection that has been quiet this long. No answer: the connection is opened again. Blank = no echo</td></tr>
+        <tr><td>TLS</td><td>Off: plain TCP. On: encrypted</td></tr>
+        <tr><td>Certificate fingerprint</td><td>For a switch with its own certificate: its SHA-256 fingerprint, which <b>Test</b> shows. Blank = the certificate must be trusted by this PC and name the switch's address</td></tr>
+      </tbody>
+    </table>
+    <p>SwitchProof waits 10 seconds to connect and 40 seconds for a reply. To change the reply wait, set <code>responseTimeoutMs</code> in <code>agent.properties</code> in your data folder and restart SwitchProof.</p>
+  </section>
+
+  <section class="hp-sec" id="sources" data-k="sources source bin card acquirer on-us remote on-us off-us international abroad mcc entry mode should post gl">
+    <h2>Sources</h2>
+    <p>Where transactions come from: whose card (field 2, by its BIN) and who acquired it (field 32). Pick a source per run, bundle item or UAT step. Open them under <b>Message defaults</b>, <b>Edit sources</b>.</p>
+    <table class="doc-tbl">
+      <thead><tr><th>Column</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>Kind</td><td>On-us, remote on-us, off-us, international, our card abroad, or custom</td></tr>
+        <tr><td>Card F2 · Acquirer F32 · Forwarding F33 · Terminal F41</td><td>The values this source sends. Blank = the message defaults</td></tr>
+        <tr><td>MCC F18 · Entry F22</td><td>Merchant category and how the card was read</td></tr>
+        <tr><td>Should post</td><td>To the customer's account or to a GL: what <a href="#money">money checks</a> expect</td></tr>
+      </tbody>
+    </table>
+    <p><b>Add the ready-made sources</b> fills in the common ones to start from. Then <b>Save sources</b>.</p>
+  </section>
+
+  <section class="hp-sec" id="types" data-k="your own transaction types custom type new type fields placeholders random date stan rrn test send submit for approval">
+    <h2>Your own transaction types <span class="hp-plan">Team</span></h2>
+    <ol class="hp-steps">
+      <li>Load test, <b>01 Transaction</b>, <b>Your types</b>, then <b>New type</b>.</li>
+      <li><b>Start from</b> the built-in type closest to yours. Give it a name, message class and processing code.</li>
+      <li>Change or add <b>fields</b>. Values can hold placeholders, filled in for each message.</li>
+      <li><b>Test send to the active target</b>: <b>Send one message</b> and see the answer.</li>
+      <li><b>Save</b>. It then shows with the built-in types.</li>
+    </ol>
+    <p>Placeholders: <code>{random:8}</code> <code>{date:MMdd}</code> <code>{account}</code> <code>{to}</code> <code>{amount}</code> <code>{currency}</code> <code>{terminal}</code> <code>{stan}</code> <code>{rrn}</code> <code>{pan}</code>. Example: field 48 = <code>TKN{random:8}</code>.</p>
+    <p><b>Submit for approval</b> sends the structure of your type to SwitchProof for review. If it's approved, it becomes a built-in type for everyone in a later release. Fixed values are masked (letters become A, digits 9) unless you choose to share them.</p>
+  </section>
+
+  <section class="hp-sec" id="security" data-k="pin pin block iso format 0 1 3 key kcv check value chip emv field 55 arqc cryptogram mac x9.19 x9.9 triple des cbc field 64 128 security hsm">
+    <h2>PIN, chip data and MAC</h2>
+    <p>Add a PIN block, chip data and a MAC to card requests, as a real terminal does. Under <b>Message defaults</b>, <b>Security</b>, saved per target.</p>
+    <div class="doc-box"><p><b>Test keys only.</b> SwitchProof is not an HSM: never give it production keys.</p></div>
+    <table class="doc-tbl">
+      <thead><tr><th>Setting</th><th>What it does</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td>Send a PIN</td><td>A test PIN, encrypted under your PIN key into field 52</td><td>1234</td></tr>
+        <tr><td>Block format</td><td>ISO 0, ISO 1 or ISO 3: ask which your switch expects</td><td>ISO 0</td></tr>
+        <tr><td>Send chip data</td><td>Field 55 with the usual tags of an online authorization</td><td></td></tr>
+        <tr><td>Sign messages (MAC)</td><td>X9.19 retail MAC, X9.9 single DES, or triple-DES CBC</td><td>X9.19</td></tr>
+        <tr><td>PIN key · MAC key</td><td>16, 32 or 48 hex digits. Paste once, then <b>Save key</b></td><td></td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>After saving, only the key's <b>check value</b> (KCV) shows. Compare it with the switch's. <b>Change</b> or <b>Remove</b> a key any time.</li>
+      <li>Keys are kept on this PC, protected with your Windows account.</li>
+      <li>The PIN and chip data go on card requests (authorizations and financial requests). The MAC goes on every message to this target: in field 64, or field 128 when the message has fields above 64.</li>
+      <li>The chip cryptogram is a placeholder, so a host that checks it declines. MACs on replies aren't checked yet.</li>
+    </ul>
+  </section>
+
+  <section class="hp-sec" id="formats" data-k="message format formats iso 8583 1987 1993 2003 flexcube ebcdic ascii packed bcd bitmap length header profile">
+    <h2>Message formats</h2>
+    <p>A format tells SwitchProof how your switch writes ISO 8583: text or packed digits, ASCII or EBCDIC, the bitmap, the length in front. Four are built in: FLEXCUBE, ISO 1987, ISO 1993 and ISO 2003. Make your own under <b>Target</b>, <b>New format</b>, and check it against a message from your switch before anything is sent. Saving your own formats is part of the Team plan.</p>
+    <p class="hp-more"><a href="formats.html">Read the formats guide</a>: each setting, with examples.</p>
+  </section>
+
+  <section class="hp-sec" id="money" data-k="money checks bank database oracle jdbc ojdbc driver read-only user schema synonyms service name balance check balance inquiry money trail rrn what did this transaction do accounting entries amount blocks">
+    <h2>Money checks <span class="hp-plan">Enterprise</span></h2>
+    <p>Check what each transaction really did to the money, not only its response code.</p>
+    <h3 id="bank-db">Bank database</h3>
+    <p>For each RRN, SwitchProof reads the switch log, the accounting entries and the amount blocks. It only reads (SELECT): use a read-only database user. The details stay on this PC. Open it from the database button on a target in the <b>Target</b> list, or from <b>Switch setup</b>.</p>
+    <table class="doc-tbl">
+      <thead><tr><th>Setting</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td>Host · Port · Service name</td><td>10.0.0.20 · 1521 · the UAT database's service</td></tr>
+        <tr><td>Schema owner</td><td>The schema that owns the FLEXCUBE tables. Blank when the read-only user has synonyms for them</td></tr>
+        <tr><td>User · Password</td><td>The read-only user. The password is protected with your Windows account</td></tr>
+        <tr><td>In UAT runs</td><td>Report problems, fail the step on a problem, or don't check</td></tr>
+        <tr><td>Driver path</td><td>Oracle's <code>ojdbc8.jar</code> or <code>ojdbc11.jar</code>, or its folder. In File Explorer, hold Shift, right-click the file, <b>Copy as path</b></td></tr>
+      </tbody>
+    </table>
+    <p>Press <b>Test connection</b>, then <b>Save</b>.</p>
+    <h3 id="balance-check">Without the database: balance check</h3>
+    <p><b>Check balances in UAT runs by balance inquiry</b> (Message defaults) sends a balance inquiry before and after each UAT step that moves money, and checks the change: two extra messages per account, per step. Choose <b>Check, and report differences</b> or <b>Check, and fail the step on a difference</b>. It's not used once a bank database is set up for the target.</p>
+    <h3 id="money-trail">What did this transaction do?</h3>
+    <p><b>Money trail</b> (under the results, and in Open transactions) looks up one RRN: every message, amount block, accounting entry and balance. Clicking the money result next to a transaction opens its trail directly.</p>
+  </section>
+
+  <!-- ================= More ================= -->
+  <section class="hp-sec" id="cli" data-k="command line cli script ci pipeline jenkins azure devops github actions junit xml exit code automation switchproof-cli">
+    <h2>Command line</h2>
+    <p>Run test cases and load tests from a script or a CI pipeline, with JUnit results and an exit code. <code>switchproof-cli.exe</code> is installed with SwitchProof 1.5.0 and newer, in <code>%LOCALAPPDATA%\SwitchProof</code>. It uses the same targets, cases and settings as the console.</p>
+    <table class="doc-tbl">
+      <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>uat</td><td>Runs test cases</td></tr>
+        <tr><td>load</td><td>Runs a load test</td></tr>
+        <tr><td>simulator</td><td>Answers as a switch with the simulator's saved settings, until stopped</td></tr>
+        <tr><td>targets · cases</td><td>Lists the saved switches, or the saved test cases</td></tr>
+        <tr><td>help · version</td><td>The full list of options · the version</td></tr>
+      </tbody>
+    </table>
+    <table class="doc-tbl">
+      <thead><tr><th>Option</th><th>For</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>--target NAME</td><td>uat, load</td><td>The switch, by name or id. Default: the active one</td></tr>
+        <tr><td>--cases all | A,B</td><td>uat</td><td>Which cases, by id or name</td></tr>
+        <tr><td>--tester NAME</td><td>uat</td><td>Shown on the report</td></tr>
+        <tr><td>--type TYPE</td><td>load</td><td>Such as WITHDRAWAL, PURCHASE, TRANSFER, BALANCE_INQUIRY. Default SIGNON</td></tr>
+        <tr><td>--count · --seconds · --ramp · --at-once</td><td>load</td><td>As in the load profile. Defaults 100, 0, 0, 10</td></tr>
+        <tr><td>--from A,B · --to A · --amount · --currency</td><td>load</td><td>Accounts (<code>@ROLE</code> works) and amount</td></tr>
+        <tr><td>--max-errors-percent P</td><td>load</td><td>Fail above this share with no usable answer. Default 0</td></tr>
+        <tr><td>--max-declined-percent P · --max-p95-ms MS</td><td>load</td><td>Fail above this share declined, or when 95% took longer</td></tr>
+        <tr><td>--junit FILE · --report FILE · --json FILE</td><td>uat, load</td><td>JUnit XML, the HTML report, the full evidence (uat)</td></tr>
+        <tr><td>--port N · --network</td><td>simulator</td><td>Another port; accept other machines</td></tr>
+        <tr><td>--data DIR</td><td>any</td><td>Use this data folder</td></tr>
+      </tbody>
+    </table>
+    <p>Exit code: <b>0</b> passed, <b>1</b> a test failed, <b>2</b> it could not run. A Linux bundle (Java 8 or later) is available on request.</p>
+    <pre class="doc-code">"%LOCALAPPDATA%\SwitchProof\switchproof-cli.exe" uat --target "UAT switch" --cases all --junit uat.xml
+"%LOCALAPPDATA%\SwitchProof\switchproof-cli.exe" load --type WITHDRAWAL --from @SAVINGS --amount 10.00 --count 600 --seconds 60 --max-p95-ms 800 --junit load.xml</pre>
+  </section>
+
+  <section class="hp-sec" id="account" data-k="plan plans free team enterprise price buy card trial invite code licence license refund cancel feedback request vote videos releases refer referral update emails theme dark light sign out">
+    <h2>Plans and account</h2>
+    <table class="doc-tbl">
+      <thead><tr><th>Plan</th><th>Adds</th></tr></thead>
+      <tbody>
+        <tr><td>Free</td><td>Load tests up to 200 messages, 5 at once. UAT runs up to 10 cases, with a watermark. ISO 8583:1987 formats</td></tr>
+        <tr><td>Team</td><td>Unlimited load tests, bundles, full UAT runs, your own types and formats, ISO 1993 and 2003, the simulator</td></tr>
+        <tr><td>Enterprise</td><td>Everything in Team, plus money checks, stand-in rehearsals and switch setup</td></tr>
+      </tbody>
+    </table>
+    <p>Prices and trials: <a href="pricing.html">Pricing</a>. Click your plan, top right, to buy by card, redeem an invite code, or <b>Talk to us</b> for an invoice, a bank transfer or a price for your team. Plans renew monthly until you cancel, with a full refund within 14 days of your first payment (<a href="refunds.html">Refunds</a>).</p>
+    <h3 id="menu">The account menu</h3>
+    <table class="doc-tbl">
+      <tbody>
+        <tr><td>Feedback</td><td>Ask for a feature or report a problem. Vote on others' requests. Never include card numbers, account numbers, switch addresses or other bank data</td></tr>
+        <tr><td>Videos</td><td>Step-by-step videos</td></tr>
+        <tr><td>Releases</td><td>What changed in each version</td></tr>
+        <tr><td>Help and guide</td><td>This page</td></tr>
+        <tr><td>Refer a colleague</td><td>On the Free plan: 30 days of Team when someone you refer buys a plan (<a href="terms.html#referrals">referral terms</a>)</td></tr>
+        <tr><td>Update emails</td><td>Emails about new videos and releases, on or off</td></tr>
+        <tr><td>Update SwitchProof</td><td>Shows when a new version is out: see <a href="#update">Updating</a></td></tr>
+        <tr><td>Disconnect agent · Sign out</td><td>Forget the pairing with this PC's SwitchProof · sign out</td></tr>
+      </tbody>
+    </table>
+    <p>The moon button, top right, switches between light and dark.</p>
+  </section>
+
+  <section class="hp-sec" id="data" data-k="data folder privacy where stored targets.json backup move another pc copy passwords keys protected windows security residency">
+    <h2>Your data</h2>
+    <ul>
+      <li>Messages go from SwitchProof on your PC straight to your switch. Switch addresses, accounts and evidence never reach this site.</li>
+      <li>Everything is kept in <code>%USERPROFILE%\SwitchProof</code>: targets (<code>targets.json</code>), test cases (<code>uat-cases.json</code>), runs and evidence (<code>uat-runs</code>), formats (<code>profiles</code>), your types (<code>types</code>), simulator settings and stand-in rehearsals.</li>
+      <li>Database passwords and keys are protected with your Windows account. To move to another PC, copy the folder, then enter the passwords and keys again there.</li>
+      <li>Use test cards, test keys and a read-only database user.</li>
+    </ul>
+    <p>More in the <a href="privacy.html">Privacy Policy</a>.</p>
+  </section>
+
+  <section class="hp-sec" id="trouble" data-k="troubleshooting problem error not working fails timeout no reply no connection dropped unreadable reply not sent refused firewall vpn decline format error 30 96 91 55 51 support">
+    <h2>Troubleshooting</h2>
+    <h3 id="errors">The kinds of error</h3>
+    <dl class="hp-fix">
+      <dt>No connection</dt><dd>The switch couldn't be reached or refused. Check the address and port from this PC, the VPN, firewalls, and whether the switch accepts this PC's address. <b>Test</b> on the target shows the cause.</dd>
+      <dt>No reply</dt><dd>The message arrived but nothing came back within 40 seconds. Usually the switch can't read it: the length header, bitmap or encoding differs (<a href="#formats">Message formats</a>). The switch's own log tells you more.</dd>
+      <dt>Dropped</dt><dd>The switch closed or reset the connection without replying. Often the same as No reply. A switch that allows one connection: <b>Kept open</b>, <b>How many</b> 1 (<a href="#connection">Connection</a>).</dd>
+      <dt>Unreadable reply</dt><dd>The reply doesn't fit the format. Paste its hex in <b>New format</b> to see where reading stops.</dd>
+      <dt>Not sent</dt><dd>The message couldn't be built, so nothing left this PC. The message says why, such as a missing key or a value too long for its field.</dd>
+    </dl>
+    <h3 id="declines">Declines that point at the setup</h3>
+    <dl class="hp-fix">
+      <dt>30 or 904, format error</dt><dd>The switch read the message differently. Compare the <b>Switch report</b> with your switch's specification, and the format's fields with it.</dd>
+      <dt>96 or 909, system malfunction</dt><dd>The switch or the core failed on it: look the RRN up in the switch's log.</dd>
+      <dt>91 or 911</dt><dd>The switch couldn't reach the core or issuer.</dd>
+      <dt>55 or 117, incorrect PIN</dt><dd>The PIN key or block format differs from the switch's. Compare the key check values (<a href="#security">PIN, chip data, MAC</a>).</dd>
+      <dt>51 or 116, insufficient funds</dt><dd>The test account needs a balance, or the amount is too big.</dd>
+      <dt>12, 57 or 58, not permitted</dt><dd>The processing code, card or terminal isn't set up for this transaction on the switch.</dd>
+    </dl>
+    <h3>Other problems</h3>
+    <dl class="hp-fix">
+      <dt>Not sent at the pace asked</dt><dd>Raise <b>At once</b>, or press <b>Use N at once</b> (<a href="#results">Results</a>).</dd>
+      <dt>Part of the Team or Enterprise plan</dt><dd>That feature needs a higher plan: see <a href="#account">Plans</a>.</dd>
+      <dt>Bank database: Test connection fails</dt><dd>Check the driver path, then host, port and service name, then the user's grants. Leave Schema owner blank only when the user has synonyms.</dd>
+      <dt>Simulator: other machines can't connect</dt><dd>Choose <b>The network</b> under Listen, and check that Windows Firewall lets SwitchProof accept connections.</dd>
+      <dt>Something else</dt><dd>Write to <a href="mailto:support@switchproof.online">support@switchproof.online</a> with the RRN, the time and what you saw. Never send card numbers or bank data.</dd>
+    </dl>
+  </section>
+
+  <section class="hp-sec" id="codes" data-k="response codes action codes field 39 approved decline meaning 00 05 51 55 91 96 000 100 116">
+    <h2>Response codes</h2>
+    <p>Field 39 of the answer. ISO 8583:1987 uses two digits; 1993 and 2003 use three-digit action codes. A format can name its own approved codes.</p>
+    <table class="doc-tbl hp-codes">
+      <thead><tr><th>1987</th><th>1993 / 2003</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>00</td><td>000</td><td>Approved</td></tr>
+        <tr><td></td><td>001 · 002</td><td>Honour with identification · approved for a partial amount</td></tr>
+        <tr><td>04</td><td></td><td>Pick up the card</td></tr>
+        <tr><td>05</td><td>100</td><td>Do not honour</td></tr>
+        <tr><td>06</td><td></td><td>Error</td></tr>
+        <tr><td>12</td><td>902</td><td>Invalid transaction</td></tr>
+        <tr><td>13</td><td>110</td><td>Invalid amount</td></tr>
+        <tr><td>14</td><td>111</td><td>Invalid card number</td></tr>
+        <tr><td>15</td><td></td><td>No such issuer</td></tr>
+        <tr><td>30</td><td>904</td><td>Format error</td></tr>
+        <tr><td>39 · 52 · 53</td><td></td><td>No credit · checking · savings account</td></tr>
+        <tr><td>51</td><td>116</td><td>Not sufficient funds</td></tr>
+        <tr><td>54</td><td>101</td><td>Expired card</td></tr>
+        <tr><td>55</td><td>117</td><td>Incorrect PIN</td></tr>
+        <tr><td></td><td>106</td><td>PIN tries exceeded</td></tr>
+        <tr><td>56</td><td></td><td>No card record</td></tr>
+        <tr><td>57</td><td>119</td><td>Not permitted to cardholder</td></tr>
+        <tr><td>58</td><td></td><td>Not permitted to terminal</td></tr>
+        <tr><td>61</td><td>121</td><td>Exceeds withdrawal limit</td></tr>
+        <tr><td>91</td><td>911</td><td>Issuer or switch inoperative · issuer timed out</td></tr>
+        <tr><td>92</td><td></td><td>No routing available</td></tr>
+        <tr><td>94</td><td></td><td>Duplicate transmission</td></tr>
+        <tr><td>96</td><td>909</td><td>System malfunction</td></tr>
+        <tr><td></td><td>400 · 800</td><td>Reversal accepted · network message accepted</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="hp-sec" id="glossary" data-k="glossary terms definitions mti bitmap stan rrn pan bin kcv arqc emv on-us off-us advice completion reversal repeat stand-in clearing gl">
+    <h2>Glossary</h2>
+    <dl class="hp-fix hp-gloss">
+      <dt>Agent</dt><dd>SwitchProof for Windows: the program on your PC that sends the messages</dd>
+      <dt>Target</dt><dd>One switch: its address, port, format and settings</dd>
+      <dt>MTI</dt><dd>Message type. 0100 authorization, 0200 financial request, 0220 completion or advice, 0400 / 0420 reversal, 0800 network (sign-on, echo). The answer adds 10: 0210, 0810</dd>
+      <dt>Bitmap</dt><dd>The part of a message that says which fields it carries</dd>
+      <dt>Processing code</dt><dd>Field 3: what the transaction is, such as 010000 withdrawal or 310000 balance inquiry</dd>
+      <dt>STAN · RRN</dt><dd>Field 11, the trace number · field 37, the retrieval reference number that identifies a transaction</dd>
+      <dt>PAN · BIN</dt><dd>The card number (field 2) · its first digits, which name the issuer</dd>
+      <dt>On-us · remote on-us · off-us</dt><dd>Our card at our terminal · our card at a partner's terminal · another bank's card</dd>
+      <dt>Advice · completion</dt><dd>A message that tells rather than asks (0120, 0220) · the final amount of an authorization</dd>
+      <dt>Repeat</dt><dd>A message sent again because no answer came (0121, 0221, 0421)</dd>
+      <dt>PIN block · KCV</dt><dd>The encrypted PIN in field 52 · a key check value, to compare keys without showing them</dd>
+      <dt>MAC</dt><dd>A message authentication code: proof the message wasn't changed</dd>
+      <dt>Chip data · ARQC</dt><dd>Field 55, the card's EMV tags · the card's request cryptogram</dd>
+      <dt>Stand-in</dt><dd>The switch approving on its own, from a balance file, while the core is away</dd>
+      <dt>Clearing</dt><dd>Settling authorizations at their final amounts</dd>
+      <dt>GL</dt><dd>A general ledger account</dd>
+      <dt>Ramp-up · at once</dt><dd>The rate climbing to full · messages waiting for a reply at the same moment</dd>
+      <dt>95% within</dt><dd>95 of every 100 answers came within this time</dd>
+    </dl>
+  </section>
+</main>
+</div>
+
+<footer class="doc-foot"><div class="doc-foot-in">
+  <span>SwitchProof is a product of <a href="https://trustroutetechnologies.com" rel="noopener">TrustRoute Technologies</a>, Burnaby, British Columbia, Canada · <a href="mailto:support@switchproof.online">support@switchproof.online</a></span>
+  <a href="help.html">Help</a><a href="formats.html">Formats</a><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a>
+</div></footer>
+
+<script>
+(function () {
+  var q = document.getElementById('hpQ'), none = document.getElementById('hpNone'), toc = document.querySelector('.hp-toc');
+  var secs = [].slice.call(document.querySelectorAll('.hp-sec'));
+  var text = secs.map(function (s) { return (s.textContent + ' ' + (s.getAttribute('data-k') || '')).toLowerCase(); });
+  var groups = [].slice.call(document.querySelectorAll('.hp-grp'));
+  function sectionOf(id) { var el = document.getElementById(id); return el && (el.classList.contains('hp-sec') ? el : el.closest('.hp-sec')); }
+  function apply() {
+    var words = q.value.toLowerCase().split(/\s+/).filter(Boolean), shown = 0;
+    secs.forEach(function (s, i) {
+      var hit = words.every(function (w) { return text[i].indexOf(w) >= 0; });
+      s.hidden = !hit;
+      if (hit) shown++;
+    });
+    groups.forEach(function (g) {
+      var any = false;
+      [].forEach.call(g.querySelectorAll('a'), function (a) { var s = sectionOf(a.getAttribute('href').slice(1)); a.hidden = !!(s && s.hidden); if (!a.hidden) any = true; });
+      g.hidden = !any;
+    });
+    none.hidden = shown > 0;
+  }
+  q.addEventListener('input', apply);
+  // The topic list is a side column on a wide screen (always open) and a fold-away list on a narrow one.
+  var narrow = window.matchMedia('(max-width: 900px)');
+  function fit() { if (toc) toc.open = !narrow.matches; }
+  fit();
+  if (narrow.addEventListener) narrow.addEventListener('change', fit); else if (narrow.addListener) narrow.addListener(fit);
+  // A topic link clears the search, so the topic is there to land on; on a narrow screen it also folds the list away.
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a) return;
+    if (q.value) { q.value = ''; apply(); }
+    if (toc && a.closest('.hp-toc') && narrow.matches) toc.open = false;
+  });
+})();
+</script>
+</body>
+</html>

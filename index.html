@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261112121009">
+<link rel="stylesheet" href="style.css?v=20261112140401">
 </head>
 <body>
 
@@ -39,6 +39,7 @@
     <div class="target-pop" id="targetPop" role="dialog" aria-label="Switch targets" hidden>
       <div class="pop-head">
         <b>Switch targets</b>
+        <a class="help-q" href="help.html#target" target="_blank" rel="noopener" title="Help: adding your switch (opens in a new tab)" aria-label="Help: adding your switch">?</a>
         <span class="summary-hint">saved in targets.json · click one to use it</span>
       </div>
       <ul class="target-list" id="targetList"></ul>
@@ -80,7 +81,7 @@
       <button type="button" role="menuitem" class="acct-item" id="fbOpen" title="Request a feature or report a problem">Feedback<span class="fb-badge" id="fbBadge" hidden></span></button>
       <button type="button" role="menuitem" class="acct-item" id="vidOpen" title="Step-by-step videos on using SwitchProof">Videos</button>
       <button type="button" role="menuitem" class="acct-item" id="relOpen" title="What changed in each version">Releases<span class="acct-ver-tag" id="acctNewVer"></span></button>
-      <a role="menuitem" class="acct-item" id="helpOpen" href="formats.html" target="_blank" rel="noopener" title="How message formats work: each setting, with examples (opens in a new tab)">Formats guide<span class="acct-ver-tag" aria-hidden="true">&#8599;</span></a>
+      <a role="menuitem" class="acct-item" id="helpOpen" href="help.html" target="_blank" rel="noopener" title="Every screen and setting, with examples (opens in a new tab)">Help and guide<span class="acct-ver-tag" aria-hidden="true">&#8599;</span></a>
       <button type="button" role="menuitem" class="acct-item" id="refOpen" hidden title="Share your link: when a colleague buys a plan, you get a free month of Team">Refer a colleague</button>
       <button type="button" role="menuitemcheckbox" aria-checked="true" class="acct-item" id="emPrefItem" hidden title="Emails about new videos and releases">Update emails<span class="acct-ver-tag" id="emPrefState"></span></button>
       <button type="button" role="menuitem" class="acct-item" id="accessOpen" hidden title="Grant plans and make invite codes">Access<span class="fb-badge" id="accBadge" hidden></span></button>
@@ -114,6 +115,7 @@
       <div class="card-head">
         <span class="step">01</span>
         <h2>Transaction</h2>
+        <a class="help-q" href="help.html#load" target="_blank" rel="noopener" title="Help: load tests (opens in a new tab)" aria-label="Help: load tests">?</a>
         <div class="mode-seg" role="tablist" aria-label="What to send">
           <button type="button" class="mode-tab" role="tab" data-mode="single" aria-selected="true">Single type</button>
           <button type="button" class="mode-tab" role="tab" data-mode="bundle" aria-selected="false">Bundle</button>
@@ -141,6 +143,7 @@
       <div class="card-head">
         <span class="step">02</span>
         <h2>Data set</h2>
+        <a class="help-q" href="help.html#data-set" target="_blank" rel="noopener" title="Help: the data set (opens in a new tab)" aria-label="Help: the data set">?</a>
         <button class="link-btn" id="templateBtn" type="button">
           <svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14"/></svg>
           Template
@@ -190,6 +193,7 @@
       <div class="card-head">
         <span class="step">03</span>
         <h2>Load profile</h2>
+        <a class="help-q" href="help.html#load-profile" target="_blank" rel="noopener" title="Help: the load profile (opens in a new tab)" aria-label="Help: the load profile">?</a>
         <span class="tps" id="tpsHint">≈ 2 tx/s</span>
         <span class="plan-hint" id="freeLimits" hidden></span>
       </div>
@@ -222,6 +226,7 @@
       <summary class="card-head">
         <span class="step">04</span>
         <h2>Message defaults</h2>
+        <a class="help-q" href="help.html#settings" target="_blank" rel="noopener" title="Help: target settings (opens in a new tab)" aria-label="Help: target settings">?</a>
         <span class="summary-hint" id="defaultsSummary"></span>
         <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
       </summary>
@@ -249,7 +254,7 @@
         </select>
       </label>
       <div class="conn-box">
-        <div><b>Connection to the switch</b> <span class="hint">saved per target</span></div>
+        <div><b>Connection to the switch</b> <a class="help-q" href="help.html#connection" target="_blank" rel="noopener" title="Help: the connection to the switch (opens in a new tab)" aria-label="Help: the connection to the switch">?</a> <span class="hint">saved per target</span></div>
         <div class="field-row three">
           <label class="field" title="A connection per message: opened, used once, closed. Kept open: messages share connections that stay open, as an acquirer's link does; replies are matched by trace number.">
             <span>Connections</span>
@@ -264,7 +269,7 @@
         </div>
       </div>
       <div class="conn-box sec-box" id="secBox" hidden>
-        <div><b>Security</b> <span class="hint">test keys only · saved per target</span></div>
+        <div><b>Security</b> <a class="help-q" href="help.html#security" target="_blank" rel="noopener" title="Help: PIN, chip data and MAC (opens in a new tab)" aria-label="Help: PIN, chip data and MAC">?</a> <span class="hint">test keys only · saved per target</span></div>
         <div class="sec-row">
           <label class="fmt-check"><input type="checkbox" id="secPinOn"><span>Send a PIN</span></label>
           <div class="sec-body" id="secPinBody" hidden>
@@ -309,7 +314,7 @@
       </label>
       <div class="sample-note" id="sampleWarn" hidden></div>
       <div class="src-summary">
-        <div><b>Sources</b> <span class="hint" id="srcSummary">none yet</span></div>
+        <div><b>Sources</b> <a class="help-q" href="help.html#sources" target="_blank" rel="noopener" title="Help: sources (opens in a new tab)" aria-label="Help: sources">?</a> <span class="hint" id="srcSummary">none yet</span></div>
         <button type="button" class="btn sm" id="srcEdit">Edit sources</button>
       </div>
     </details>
@@ -336,7 +341,10 @@
           <div class="run-title" id="runTitle">No run yet</div>
           <div class="run-sub mono" id="progressText">Configure a test on the left and press Run.</div>
         </div>
-        <span id="statusPill" class="status idle">Idle</span>
+        <span class="run-head-end">
+          <a class="help-q" href="help.html#results" target="_blank" rel="noopener" title="Help: reading the results (opens in a new tab)" aria-label="Help: reading the results">?</a>
+          <span id="statusPill" class="status idle">Idle</span>
+        </span>
       </div>
       <div class="progress"><div id="progressFill" class="progress-fill"></div></div>
 
@@ -388,7 +396,7 @@
         <div id="codeBars" class="code-bars"><div class="muted small">No responses yet</div></div>
       </div>
       <div class="card">
-        <div class="card-head"><h2>Errors</h2><span class="summary-hint">no reply from the switch</span></div>
+        <div class="card-head"><h2>Errors</h2><a class="help-q" href="help.html#errors" target="_blank" rel="noopener" title="Help: the kinds of error (opens in a new tab)" aria-label="Help: the kinds of error">?</a><span class="summary-hint">no reply from the switch</span></div>
         <ul id="errorList" class="error-list"><li class="muted small">None</li></ul>
       </div>
     </div>
@@ -417,6 +425,7 @@
 <section class="card open-card">
   <div class="card-head">
     <h2>Open transactions</h2>
+    <a class="help-q" href="help.html#open" target="_blank" rel="noopener" title="Help: open transactions (opens in a new tab)" aria-label="Help: open transactions">?</a>
     <span id="authCount" class="pill neutral">0 open</span>
     <p class="hint inline">Approved financial transactions land here. <b>Settle</b> sends a completion (0220) for an authorization; <b>Reverse</b> sends a reversal (0400) with the original RRN. Select rows to settle or reverse many at once.</p>
     <button type="button" class="link-btn" id="otTrailBtn" hidden>Money trail</button>
@@ -469,7 +478,7 @@
 <div id="viewStandin" hidden>
 <main class="si-layout">
   <section class="card si-setup">
-    <div class="card-head"><h2>Cutover rehearsal</h2><span class="summary-hint" id="siTargetLine">—</span>
+    <div class="card-head"><h2>Cutover rehearsal</h2><a class="help-q" href="help.html#standin" target="_blank" rel="noopener" title="Help: stand-in rehearsals (opens in a new tab)" aria-label="Help: stand-in rehearsals">?</a><span class="summary-hint" id="siTargetLine">—</span>
       <div class="head-actions"><button type="button" class="btn sm ghost-plain" id="siNew" hidden>New rehearsal</button></div></div>
     <p class="si-lead">The card switch runs in stand-in while no core is connected, then its queue goes to the New Flexcube Core.
       SwitchProof plays the switch through each step and reconciles every transaction, account and GL.</p>
@@ -669,7 +678,7 @@
 <div id="viewSim" hidden>
 <main class="sim-layout">
   <section class="card">
-    <div class="card-head"><h2>Simulator</h2><span class="summary-hint">SwitchProof answers as the switch or issuer</span></div>
+    <div class="card-head"><h2>Simulator</h2><a class="help-q" href="help.html#sim" target="_blank" rel="noopener" title="Help: the simulator (opens in a new tab)" aria-label="Help: the simulator">?</a><span class="summary-hint">SwitchProof answers as the switch or issuer</span></div>
     <form id="simForm" autocomplete="off" novalidate>
       <fieldset class="fmt-step">
         <legend><span class="fmt-no" aria-hidden="true">1</span>Listen</legend>
@@ -756,6 +765,7 @@
   <section class="card st-flow">
     <div class="card-head">
       <h2>Customize a transaction</h2>
+      <a class="help-q" href="help.html#setup" target="_blank" rel="noopener" title="Help: switch setup (opens in a new tab)" aria-label="Help: switch setup">?</a>
       <span class="summary-hint" id="stTargetLine">—</span>
       <div class="head-actions">
         <span class="summary-hint" id="stReadAt"></span>
@@ -878,7 +888,7 @@
 <dialog class="fb-dlg st-src-dlg" id="stUpDlg" aria-labelledby="stUpTitle">
   <div class="dlg-head">
     <div><p class="fb-eyebrow">Switch setup, without a database connection</p><h2 id="stUpTitle">Upload the setup</h2></div>
-    <button type="button" class="t-btn" id="stUpClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <span class="dlg-head-end"><a class="help-q" href="help.html#setup" target="_blank" rel="noopener" title="Help: uploading the setup (opens in a new tab)" aria-label="Help: uploading the setup">?</a><button type="button" class="t-btn" id="stUpClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span>
   </div>
   <p class="si-note">Run each SELECT in your SQL tool, save the result as CSV with headers, and upload it. The files stay on this PC.</p>
   <label class="field st-schema"><span>Schema <em>blank if your user has synonyms</em></span><input type="text" id="stUpSchema" class="mono" placeholder="FCUBS"></label>
@@ -897,7 +907,7 @@
 <dialog class="fb-dlg st-src-dlg" id="stSrcDlg" aria-labelledby="stSrcTitle">
   <div class="dlg-head">
     <div><p class="fb-eyebrow">Switch setup</p><h2 id="stSrcTitle">Sources</h2></div>
-    <button type="button" class="t-btn" id="stSrcClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <span class="dlg-head-end"><a class="help-q" href="help.html#setup" target="_blank" rel="noopener" title="Help: switch setup sources (opens in a new tab)" aria-label="Help: switch setup sources">?</a><button type="button" class="t-btn" id="stSrcClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span>
   </div>
   <div class="table-wrap"><table class="tbl">
     <thead><tr><th>Package</th><th>Read from</th><th class="num">Lines</th><th></th></tr></thead>
@@ -916,6 +926,7 @@
   <section class="card uat-lib">
     <div class="card-head">
       <h2>Test cases</h2>
+      <a class="help-q" href="help.html#uat" target="_blank" rel="noopener" title="Help: UAT test cases (opens in a new tab)" aria-label="Help: UAT test cases">?</a>
       <span class="pill neutral" id="caseCount">0</span>
       <div class="head-actions">
         <button class="btn sm ghost-plain" id="caseTemplateBtn" type="button" title="Download the spreadsheet layout">Template</button>
@@ -934,7 +945,7 @@
 
   <section class="uat-side">
     <div class="card">
-      <div class="card-head"><h2>Execute</h2><span class="summary-hint" id="uatTargetLine">—</span></div>
+      <div class="card-head"><h2>Execute</h2><a class="help-q" href="help.html#uat-run" target="_blank" rel="noopener" title="Help: running UAT (opens in a new tab)" aria-label="Help: running UAT">?</a><span class="summary-hint" id="uatTargetLine">—</span></div>
       <div class="sample-banner" id="uatSampleWarn" role="alert" hidden></div>
       <div class="field-row two">
         <label class="field"><span>Tester</span><input type="text" id="uatTester" placeholder="Name on the report" maxlength="60"></label>
@@ -942,7 +953,7 @@
       </div>
       <details class="roles" id="rolesBox">
         <summary>
-          <span>Account roles for this target</span>
+          <span>Account roles for this target</span> <a class="help-q" href="help.html#roles" target="_blank" rel="noopener" title="Help: account roles (opens in a new tab)" aria-label="Help: account roles">?</a>
           <span class="summary-hint" id="rolesHint"></span>
           <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
         </summary>
@@ -980,7 +991,7 @@
     </div>
 
     <div class="card">
-      <div class="card-head"><h2>Run history</h2><span class="summary-hint">saved in uat-runs/</span></div>
+      <div class="card-head"><h2>Run history</h2><a class="help-q" href="help.html#uat-run" target="_blank" rel="noopener" title="Help: UAT evidence and run history (opens in a new tab)" aria-label="Help: UAT evidence and run history">?</a><span class="summary-hint">saved in uat-runs/</span></div>
       <div class="table-wrap">
         <table class="tbl">
           <thead><tr><th>Run</th><th>Target</th><th>Tester</th><th>Passed</th><th></th></tr></thead>
@@ -996,7 +1007,7 @@
   <form method="dialog" id="caseForm" autocomplete="off">
     <div class="dlg-head">
       <h2 id="cdTitle">New test case</h2>
-      <button type="button" class="t-btn" id="cdClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <span class="dlg-head-end"><a class="help-q" href="help.html#uat" target="_blank" rel="noopener" title="Help: test cases (opens in a new tab)" aria-label="Help: test cases">?</a><button type="button" class="t-btn" id="cdClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span>
     </div>
     <div class="cd-grid">
       <label class="field"><span>Case ID <em>blank = next TC-nnn</em></span><input type="text" id="cdId" class="mono" maxlength="40"></label>
@@ -1072,7 +1083,7 @@
       </dl>
 
       <p class="gx-foot">SwitchProof is a product of <a href="https://trustroutetechnologies.com" rel="noopener">TrustRoute Technologies</a>. For use with the Oracle FLEXCUBE ATM/POS switch. Not affiliated with Oracle; Oracle and FLEXCUBE are trademarks of Oracle Corporation.</p>
-      <nav class="gx-legal" aria-label="Plans and policies"><a href="formats.html">Formats</a><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a><a href="mailto:support@switchproof.online">Contact</a></nav>
+      <nav class="gx-legal" aria-label="Plans and policies"><a href="help.html">Help</a><a href="formats.html">Formats</a><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a><a href="mailto:support@switchproof.online">Contact</a></nav>
     </div>
   </aside>
 
@@ -1109,7 +1120,7 @@
 
       <section class="gate-step" data-step="connect" hidden>
         <p class="gx-eyebrow">Set up</p>
-        <h2>Connect your agent</h2>
+        <h2>Connect your agent <a class="help-q" href="help.html#connect" target="_blank" rel="noopener" title="Help: connecting SwitchProof (opens in a new tab)" aria-label="Help: connecting SwitchProof">?</a></h2>
         <div class="gx-allow" id="gcAllow" hidden>
           <div id="gcAsk">
             <b>Connect to SwitchProof on this PC</b>
@@ -1167,7 +1178,7 @@
 
       <section class="gate-step" data-step="update" hidden>
         <p class="gx-eyebrow">Update required</p>
-        <h2>Update SwitchProof</h2>
+        <h2>Update SwitchProof <a class="help-q" href="help.html#update" target="_blank" rel="noopener" title="Help: updating SwitchProof (opens in a new tab)" aria-label="Help: updating SwitchProof">?</a></h2>
         <p class="gx-note">This website needs SwitchProof for Windows <b id="guNeed"></b> or newer. The copy on this PC is <b id="guHave"></b><span id="guLatestText" hidden>; the latest is <b id="guLatest"></b></span>.</p>
         <ol class="gx-steps">
           <li>
@@ -1201,7 +1212,7 @@
       <p class="fb-eyebrow">Money checks</p>
       <h2 id="dbTitle">Bank database</h2>
     </div>
-    <button type="button" class="t-btn" id="dbClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <span class="dlg-head-end"><a class="help-q" href="help.html#bank-db" target="_blank" rel="noopener" title="Help: the bank database (opens in a new tab)" aria-label="Help: the bank database">?</a><button type="button" class="t-btn" id="dbClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span>
   </div>
   <p class="fb-lead">For each RRN, SwitchProof reads the switch log, the accounting entries and the amount blocks, and checks what the transaction really did to the money. It only reads (SELECT): use a read-only database user. These details stay on this PC.</p>
   <form id="dbForm" autocomplete="off">
@@ -1354,7 +1365,7 @@
       <p class="fb-eyebrow">Money trail</p>
       <h2 id="mtTitle">What did this transaction do?</h2>
     </div>
-    <button type="button" class="t-btn" id="mtClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <span class="dlg-head-end"><a class="help-q" href="help.html#money-trail" target="_blank" rel="noopener" title="Help: the money trail (opens in a new tab)" aria-label="Help: the money trail">?</a><button type="button" class="t-btn" id="mtClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span>
   </div>
   <form class="mt-form" id="mtForm" autocomplete="off">
     <input type="text" id="mtRrn" class="mono" placeholder="RRN, e.g. 123456789012" maxlength="12" required aria-label="RRN">
@@ -1370,7 +1381,7 @@
       <p class="fb-eyebrow">Your plan</p>
       <h2 id="planTitle">Free</h2>
     </div>
-    <button type="button" class="t-btn" id="planClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <span class="dlg-head-end"><a class="help-q" href="help.html#account" target="_blank" rel="noopener" title="Help: plans (opens in a new tab)" aria-label="Help: plans">?</a><button type="button" class="t-btn" id="planClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span>
   </div>
   <p class="plan-sub" id="planSub"></p>
   <ul class="plan-features" id="planFeatures"></ul>
@@ -1438,7 +1449,7 @@
       <p class="fb-eyebrow">Message defaults</p>
       <h2 id="srcTitle">Sources for <span id="srcTarget">—</span></h2>
     </div>
-    <button type="button" class="t-btn" id="srcClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <span class="dlg-head-end"><a class="help-q" href="help.html#sources" target="_blank" rel="noopener" title="Help: sources (opens in a new tab)" aria-label="Help: sources">?</a><button type="button" class="t-btn" id="srcClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span>
   </div>
   <div class="src-box">
         <div class="src-head"><b>Sources</b><span class="hint">Where transactions come from: whose card (F2, by its BIN) and who acquired it (F32). Blank fields use the defaults above. Pick a source per run, bundle item or UAT step.</span></div>
@@ -1461,7 +1472,7 @@
       <p class="fb-eyebrow">Transaction types</p>
       <h2 id="tyTitle">Your own transaction types</h2>
     </div>
-    <button type="button" class="t-btn" id="tyClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <span class="dlg-head-end"><a class="help-q" href="help.html#types" target="_blank" rel="noopener" title="Help: your own transaction types (opens in a new tab)" aria-label="Help: your own transaction types">?</a><button type="button" class="t-btn" id="tyClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span>
   </div>
   <p class="plan-hint" id="tyLock" hidden>Your own transaction types are part of the Team plan: you can design one here, but saving and sending it needs Team.</p>
   <div class="ty-layout">
@@ -1809,7 +1820,7 @@
           <li>Paste a message captured from your switch and SwitchProof reads it field by field with your format, showing exactly where it stops if something doesn't fit.</li>
           <li>New field kinds for packed numbers and track data, and chip data (field 55) shown tag by tag.</li>
           <li>Text fields now accept every printable character, such as the slash and comma in a merchant name.</li>
-          <li>A new help page explains each setting, with examples: Formats guide in the account menu, or How formats work under the message format in Target.</li>
+          <li>A help page explains each format setting, with examples: How formats work, under the message format in Target.</li>
         </ul>
         <h4>Load tests</h4>
         <ul>
@@ -1843,6 +1854,10 @@
         <ul>
           <li>switchproof-cli runs UAT cases and load tests from a build pipeline, writes JUnit results, and ends with an exit code your pipeline can act on. It is installed next to SwitchProof.</li>
           <li>A Linux bundle (needs Java 8 or later) is available on request.</li>
+        </ul>
+        <h4>Help and guide</h4>
+        <ul>
+          <li>Every screen and setting explained, with examples and what to do when something goes wrong: Help and guide in the account menu, or the ? beside each screen and dialog.</li>
         </ul>
         <h4>Also</h4>
         <ul>
@@ -1999,8 +2014,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20261112121009"></script>
-<script src="agent.js?v=20261112121009"></script>
-<script src="app.js?v=20261112121009"></script>
+<script src="config.js?v=20261112140401"></script>
+<script src="agent.js?v=20261112140401"></script>
+<script src="app.js?v=20261112140401"></script>
 </body>
 </html>
