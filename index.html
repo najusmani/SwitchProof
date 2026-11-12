@@ -3,18 +3,116 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SwitchProof</title>
+<title>SwitchProof: ISO 8583 testing for card switches</title>
+<meta name="description" content="Load, UAT and functional testing for ATM and POS card switches over ISO 8583: a switch simulator, PIN, MAC and chip data, and printable evidence. Free plan.">
+<link rel="canonical" href="https://switchproof.online/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SwitchProof">
+<meta property="og:title" content="SwitchProof: ISO 8583 testing for card switches">
+<meta property="og:description" content="Load, UAT and functional testing for ATM and POS card switches over ISO 8583: a switch simulator, PIN, MAC and chip data, and printable evidence. Free plan.">
+<meta property="og:url" content="https://switchproof.online/">
+<meta property="og:image" content="https://switchproof.online/social-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="SwitchProof: ISO 8583 testing for card switches">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "Organization",
+   "@id": "https://switchproof.online/#org",
+   "name": "TrustRoute Technologies",
+   "url": "https://trustroutetechnologies.com",
+   "email": "support@switchproof.online",
+   "address": {
+    "@type": "PostalAddress",
+    "addressLocality": "Burnaby",
+    "addressRegion": "BC",
+    "addressCountry": "CA"
+   }
+  },
+  {
+   "@type": "WebSite",
+   "@id": "https://switchproof.online/#site",
+   "name": "SwitchProof",
+   "url": "https://switchproof.online/",
+   "inLanguage": "en",
+   "publisher": {
+    "@id": "https://switchproof.online/#org"
+   }
+  },
+  {
+   "@type": "SoftwareApplication",
+   "@id": "https://switchproof.online/#app",
+   "name": "SwitchProof",
+   "url": "https://switchproof.online/",
+   "applicationCategory": "BusinessApplication",
+   "operatingSystem": "Windows",
+   "description": "Functional, UAT and load testing for ATM and POS card switches that speak ISO 8583: real messages from a Windows agent inside your network, expected answers checked, and printable evidence for sign-off.",
+   "featureList": [
+    "ISO 8583 load tests with throughput, latency percentiles and response codes",
+    "UAT test cases with expected response codes, pass or fail, and printable evidence",
+    "Switch and issuer simulator for ATMs, POS terminals and switch links",
+    "Any ISO 8583 message format: ASCII or EBCDIC, packed numbers, bitmaps, length headers",
+    "PIN blocks, MAC and EMV chip data (field 55) with test keys",
+    "Stand-in cutover rehearsal with reconciliation of every transaction",
+    "Command line with JUnit results for CI pipelines"
+   ],
+   "publisher": {
+    "@id": "https://switchproof.online/#org"
+   },
+   "offers": [
+    {
+     "@type": "Offer",
+     "name": "Free",
+     "price": "0",
+     "priceCurrency": "USD",
+     "url": "https://switchproof.online/pricing.html"
+    },
+    {
+     "@type": "Offer",
+     "name": "Team",
+     "price": "100",
+     "priceCurrency": "USD",
+     "url": "https://switchproof.online/pricing.html",
+     "priceSpecification": {
+      "@type": "UnitPriceSpecification",
+      "price": "100",
+      "priceCurrency": "USD",
+      "unitText": "per person per month"
+     }
+    },
+    {
+     "@type": "Offer",
+     "name": "Enterprise",
+     "price": "500",
+     "priceCurrency": "USD",
+     "url": "https://switchproof.online/pricing.html",
+     "priceSpecification": {
+      "@type": "UnitPriceSpecification",
+      "price": "500",
+      "priceCurrency": "USD",
+      "unitText": "per person per month"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261112140401">
+<link rel="stylesheet" href="style.css?v=20261112175658">
 </head>
 <body>
 
-<header class="topbar">
+<header class="topbar" data-nosnippet>
   <div class="brand" title="ISO 8583 load, function &amp; UAT console">
     <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="2"/><path d="M6 15.5l3.5-6 3 4.5 2.2-3.2L18 15.5"/></svg>
     <div class="brand-name">SwitchProof</div>
@@ -104,7 +202,7 @@
   <button type="button" class="deal-close" id="dealClose" aria-label="Hide this offer" title="Hide">&times;</button>
 </div>
 
-<div id="viewLoad">
+<div id="viewLoad" data-nosnippet>
 <main class="layout">
 
   <!-- ================= COMPOSE ================= -->
@@ -475,7 +573,7 @@
 </div>
 
 <!-- ================= UAT ================= -->
-<div id="viewStandin" hidden>
+<div id="viewStandin" data-nosnippet hidden>
 <main class="si-layout">
   <section class="card si-setup">
     <div class="card-head"><h2>Cutover rehearsal</h2><a class="help-q" href="help.html#standin" target="_blank" rel="noopener" title="Help: stand-in rehearsals (opens in a new tab)" aria-label="Help: stand-in rehearsals">?</a><span class="summary-hint" id="siTargetLine">—</span>
@@ -675,7 +773,7 @@
 </main>
 </div>
 
-<div id="viewSim" hidden>
+<div id="viewSim" data-nosnippet hidden>
 <main class="sim-layout">
   <section class="card">
     <div class="card-head"><h2>Simulator</h2><a class="help-q" href="help.html#sim" target="_blank" rel="noopener" title="Help: the simulator (opens in a new tab)" aria-label="Help: the simulator">?</a><span class="summary-hint">SwitchProof answers as the switch or issuer</span></div>
@@ -760,7 +858,7 @@
 </main>
 </div>
 
-<div id="viewSetup" hidden>
+<div id="viewSetup" data-nosnippet hidden>
 <main class="st-layout">
   <section class="card st-flow">
     <div class="card-head">
@@ -920,7 +1018,7 @@
     <select id="stDays"><option value="1">1 day</option><option value="7" selected>7 days</option><option value="30">30 days</option></select></label>
 </dialog>
 
-<div id="viewUat" hidden>
+<div id="viewUat" data-nosnippet hidden>
 <main class="uat-layout">
 
   <section class="card uat-lib">
@@ -2014,8 +2112,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20261112140401"></script>
-<script src="agent.js?v=20261112140401"></script>
-<script src="app.js?v=20261112140401"></script>
+<script src="config.js?v=20261112175658"></script>
+<script src="agent.js?v=20261112175658"></script>
+<script src="app.js?v=20261112175658"></script>
 </body>
 </html>
