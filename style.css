@@ -261,6 +261,7 @@ b { font-weight: 600; }
   color: var(--accent); font-size: 12.5px; font-weight: 500;
 }
 .link-btn:hover { background: var(--accent-soft); }
+a.link-btn { text-decoration: none; }
 .link-btn.danger { color: var(--bad); }
 .link-btn.danger:hover { background: var(--bad-soft); }
 .link-btn svg { width: 14px; height: 14px; }
@@ -1181,7 +1182,8 @@ input.is-sample { border-color: var(--warn) !important; box-shadow: inset 0 0 0 
 /* ---- message formats: the three-step dialog (start from, how it writes, check with a message) ---- */
 dialog:modal { overscroll-behavior: contain; }                     /* scrolling inside a dialog never moves the page behind it */
 dialog::backdrop { overflow: hidden; overscroll-behavior: contain; }
-.tf-format { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin: -4px 0 8px; }
+.tf-format { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 14px; align-items: baseline; margin: -4px 0 8px; }
+.tf-format .link-btn { margin-left: 0; }   /* the row sits on the right; each link would otherwise take half the space */
 .tf-format .tf-msg { white-space: normal; }
 .fmt-dlg { width: min(780px, calc(100vw - 32px)); }
 .fmt-help { display: inline-block; margin-top: 4px; font-size: 12.5px; color: var(--muted); text-underline-offset: 3px; }
@@ -1499,6 +1501,7 @@ body.doc-page { background: var(--bg); color: var(--text); min-height: 100vh; di
 .acct-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 8px 10px; background: none; border: 0; border-radius: var(--radius-sm); color: var(--text); font: 500 13px var(--font); text-align: left; cursor: pointer; }
 .acct-item:hover, .acct-item:focus-visible { background: var(--surface-2); outline: none; }
 .acct-item[hidden] { display: none; }
+a.acct-item { text-decoration: none; box-sizing: border-box; }
 .acct-item[data-signout] { color: var(--bad); }
 .acct-sep { height: 1px; background: var(--border); margin: 4px 2px; }
 .acct-menu .fb-badge { margin-left: auto; }

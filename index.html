@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261111230940">
+<link rel="stylesheet" href="style.css?v=20261112121009">
 </head>
 <body>
 
@@ -56,6 +56,7 @@
           <button type="button" class="link-btn" id="fmtNew" hidden>New format</button>
           <button type="button" class="link-btn" id="fmtEdit" hidden>Change this format</button>
           <span class="tf-msg warn-t" id="fmtBroken" hidden></span>
+          <a class="link-btn" id="fmtHelp" href="formats.html" target="_blank" rel="noopener" title="Each format setting, with examples (opens in a new tab)">How formats work</a>
         </div>
         <div class="tf-actions">
           <span class="tf-msg" id="tfMsg"></span>
@@ -79,6 +80,7 @@
       <button type="button" role="menuitem" class="acct-item" id="fbOpen" title="Request a feature or report a problem">Feedback<span class="fb-badge" id="fbBadge" hidden></span></button>
       <button type="button" role="menuitem" class="acct-item" id="vidOpen" title="Step-by-step videos on using SwitchProof">Videos</button>
       <button type="button" role="menuitem" class="acct-item" id="relOpen" title="What changed in each version">Releases<span class="acct-ver-tag" id="acctNewVer"></span></button>
+      <a role="menuitem" class="acct-item" id="helpOpen" href="formats.html" target="_blank" rel="noopener" title="How message formats work: each setting, with examples (opens in a new tab)">Formats guide<span class="acct-ver-tag" aria-hidden="true">&#8599;</span></a>
       <button type="button" role="menuitem" class="acct-item" id="refOpen" hidden title="Share your link: when a colleague buys a plan, you get a free month of Team">Refer a colleague</button>
       <button type="button" role="menuitemcheckbox" aria-checked="true" class="acct-item" id="emPrefItem" hidden title="Emails about new videos and releases">Update emails<span class="acct-ver-tag" id="emPrefState"></span></button>
       <button type="button" role="menuitem" class="acct-item" id="accessOpen" hidden title="Grant plans and make invite codes">Access<span class="fb-badge" id="accBadge" hidden></span></button>
@@ -1807,7 +1809,7 @@
           <li>Paste a message captured from your switch and SwitchProof reads it field by field with your format, showing exactly where it stops if something doesn't fit.</li>
           <li>New field kinds for packed numbers and track data, and chip data (field 55) shown tag by tag.</li>
           <li>Text fields now accept every printable character, such as the slash and comma in a merchant name.</li>
-          <li>A new help page explains each setting, with examples.</li>
+          <li>A new help page explains each setting, with examples: Formats guide in the account menu, or How formats work under the message format in Target.</li>
         </ul>
         <h4>Load tests</h4>
         <ul>
@@ -1997,8 +1999,8 @@
 </dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="config.js?v=20261111230940"></script>
-<script src="agent.js?v=20261111230940"></script>
-<script src="app.js?v=20261111230940"></script>
+<script src="config.js?v=20261112121009"></script>
+<script src="agent.js?v=20261112121009"></script>
+<script src="app.js?v=20261112121009"></script>
 </body>
 </html>
