@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Features: ISO 8583 load tests, UAT, simulator · SwitchProof</title>
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="description" content="What SwitchProof tests on ATM and POS card switches: ISO 8583 load tests, UAT cases with evidence, a switch simulator, PIN, MAC and EMV data, and CI runs.">
+<link rel="canonical" href="https://switchproof.online/features.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SwitchProof">
+<meta property="og:title" content="Features: ISO 8583 load tests, UAT, simulator · SwitchProof">
+<meta property="og:description" content="What SwitchProof tests on ATM and POS card switches: ISO 8583 load tests, UAT cases with evidence, a switch simulator, PIN, MAC and EMV data, and CI runs.">
+<meta property="og:url" content="https://switchproof.online/features.html">
+<meta property="og:image" content="https://switchproof.online/social-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="SwitchProof: ISO 8583 testing for card switches">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "BreadcrumbList",
+ "itemListElement": [
+  {"@type": "ListItem", "position": 1, "name": "SwitchProof", "item": "https://switchproof.online/"},
+  {"@type": "ListItem", "position": 2, "name": "Features", "item": "https://switchproof.online/features.html"}
+ ]
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=20261112230012">
+<script>try { var t = JSON.parse(localStorage.getItem('ss.theme')); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
+</head>
+<body class="doc-page">
+
+<header class="doc-top"><div class="doc-top-in">
+  <a class="doc-brand" href="./"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="2"/><path d="M6 15.5l3.5-6 3 4.5 2.2-3.2L18 15.5"/></svg>SwitchProof</a>
+  <nav class="doc-nav" aria-label="SwitchProof">
+    <a href="features.html" aria-current="page">Features</a><a href="help.html">Help</a><a href="formats.html">Formats</a><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a><a href="./">Sign in</a>
+  </nav>
+</div></header>
+
+<main class="doc wide fx">
+  <section class="fx-hero">
+    <p class="fx-k">Features</p>
+    <h1>ISO 8583 testing for card switches</h1>
+    <p class="fx-lead">Load, UAT and functional tests for ATM and POS switches. SwitchProof sends real ISO&nbsp;8583 messages from a Windows PC inside your network, checks every answer against what you expect, and keeps the evidence for sign-off.</p>
+    <div class="fx-cta"><a class="fx-btn primary" href="./">Start free</a><a class="fx-btn" href="pricing.html">See pricing</a></div>
+  </section>
+
+  <section class="fx-row" id="load-testing">
+    <div class="fx-text">
+      <p class="fx-k">Load testing</p>
+      <h2>ISO 8583 load tests</h2>
+      <p>Send hundreds or thousands of transactions at the pace you set, and see how your switch keeps up.</p>
+      <ul>
+        <li>Messages per second, and the time half, 95% and 99% of answers took, not just an average</li>
+        <li>A ramp-up, and how many messages wait for their reply at once</li>
+        <li>Response codes and errors by kind: no connection, no reply, dropped, unreadable</li>
+        <li>Mixed traffic in one run: an ATM day, a POS day, or every money message reversed <span class="hp-plan">Team</span></li>
+        <li>Honest numbers: when SwitchProof itself can't keep your pace, it says so</li>
+      </ul>
+    </div>
+    <figure class="fx-fig"><a href="help-results.webp" target="_blank" rel="noopener" title="Open the full-size picture"><img src="help-results.webp" width="740" height="705" loading="lazy" alt="Load test results: 300 withdrawals over 30 seconds, 270 approved and 30 declined, 10 a second, half within 38 ms, 95% within 47 ms, 99% within 53 ms, with the throughput chart and response codes."></a><figcaption>300 withdrawals against the simulator. Test data.</figcaption></figure>
+  </section>
+
+  <section class="fx-row" id="uat">
+    <div class="fx-text">
+      <p class="fx-k">UAT</p>
+      <h2>UAT test cases with printable evidence</h2>
+      <p>Write each scenario once, run it on any environment, and hand over evidence your bank can sign off.</p>
+      <ul>
+        <li>Chains of steps: purchase, settle, withdraw, reverse, transfer, balance</li>
+        <li>The answer you expect for each step: <code>00</code>, a list such as <code>05,51</code>, or any decline</li>
+        <li>Account roles, so the same cases run on UAT and production</li>
+        <li>A printable report, an evidence CSV, and your bank's own test-sheet columns</li>
+        <li>Money checks: what each transaction really did to the account <span class="hp-plan">Enterprise</span></li>
+      </ul>
+    </div>
+    <figure class="fx-fig"><a href="help-uat.webp" target="_blank" rel="noopener" title="Open the full-size picture"><img src="help-uat.webp" width="1280" height="900" loading="lazy" alt="The UAT screen: a library of test cases, and a finished run with every case passed and one opened to show each step's expected and actual response code."></a><figcaption>A UAT run, one case opened to its steps. Test data.</figcaption></figure>
+  </section>
+
+  <section class="fx-row" id="simulator">
+    <div class="fx-text">
+      <p class="fx-k">Simulator <span class="hp-plan">Team</span></p>
+      <h2>An ISO 8583 switch simulator</h2>
+      <p>SwitchProof answers as the switch or the issuer, so you can test an ATM, a POS or a switch's own link without the real host.</p>
+      <ul>
+        <li>Rules by message type, processing code, card range, account or amount</li>
+        <li>Any response code, a delay, or no reply at all to test timeouts</li>
+        <li>Balances kept per account: insufficient funds when they run out</li>
+        <li>Runs from the console or the command line</li>
+      </ul>
+    </div>
+    <figure class="fx-fig"><a href="help-sim.webp" target="_blank" rel="noopener" title="Open the full-size picture"><img src="help-sim.webp" width="1280" height="829" loading="lazy" alt="The simulator listening on a port with one rule, its log of withdrawals and answers, and the balances it keeps for each account."></a><figcaption>The simulator answering a load test. Test data.</figcaption></figure>
+  </section>
+
+  <section class="fx-more" id="more">
+    <h2>And everything around it</h2>
+    <div class="fx-grid">
+      <div class="fx-card" id="formats">
+        <h3>Any ISO 8583 message format</h3>
+        <p>ASCII or EBCDIC, packed or text numbers, binary or hex bitmaps, length headers. FLEXCUBE, ISO 1987, 1993 and 2003 built in, and your own checked against a real message. <a href="formats.html">Formats guide</a></p>
+      </div>
+      <div class="fx-card" id="security">
+        <h3>PIN blocks, MAC and EMV chip data</h3>
+        <p>Encrypted PIN blocks (ISO 0, 1, 3), MACs (X9.19, X9.9, triple-DES) and chip data in field 55, with test keys you can check by their check value.</p>
+      </div>
+      <div class="fx-card" id="cli">
+        <h3>Command line for CI</h3>
+        <p>Run UAT cases and load tests from a pipeline, with JUnit results and an exit code. Fail a build on errors, declines or slow answers.</p>
+      </div>
+      <div class="fx-card" id="standin">
+        <h3>Stand-in cutover rehearsal <span class="hp-plan">Enterprise</span></h3>
+        <p>Rehearse a core banking cutover: stand-in, the balance file, the queue release, and every transaction, account and GL reconciled.</p>
+      </div>
+      <div class="fx-card" id="switch-setup">
+        <h3>Switch setup for Oracle FLEXCUBE <span class="hp-plan">Enterprise</span></h3>
+        <p>See how the switch interface is set up for each processing code, plan a change through the transaction life cycle, and get a change pack to review.</p>
+      </div>
+      <div class="fx-card" id="data">
+        <h3>Your data stays in your network</h3>
+        <p>Messages go from SwitchProof on your PC straight to your switch. Switch addresses, accounts and evidence never reach this site.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="fx-faq" id="questions">
+    <h2>Questions</h2>
+    <details><summary>Does SwitchProof see our card data?</summary><p>No. SwitchProof for Windows sends the messages from your PC to your switch and keeps the results there. This website handles your account and plan only. Use test cards and test keys: SwitchProof is not an HSM.</p></details>
+    <details><summary>Which switches does it work with?</summary><p>Switches that speak ISO 8583 over TCP or TLS. Four formats are built in, including the Oracle FLEXCUBE switch interface; for another switch, describe its format in the console and check it against a message captured from it.</p></details>
+    <details><summary>What do we need to install?</summary><p>SwitchProof for Windows, on a PC that can reach your switch (bank network or VPN). It's about 35 MB with Java included, and needs no admin rights.</p></details>
+    <details><summary>Is there a free plan?</summary><p>Yes. The Free plan runs load tests of up to 200 messages and UAT runs of up to 10 cases, with no card needed. <a href="pricing.html">Pricing</a> lists Team and Enterprise.</p></details>
+    <details><summary>Can it run in our CI pipeline?</summary><p>Yes. <code>switchproof-cli</code> runs UAT cases and load tests, writes JUnit XML, and ends with an exit code your pipeline can act on. See the <a href="help.html#cli">command line help</a>.</p></details>
+  </section>
+
+  <section class="fx-end">
+    <h2>Try it on your switch</h2>
+    <p>Create a free account, install SwitchProof, and send your first message in minutes.</p>
+    <div class="fx-cta"><a class="fx-btn primary" href="./">Start free</a><a class="fx-btn" href="help.html">Read the guide</a></div>
+    <p class="fx-note">Oracle and FLEXCUBE are trademarks of Oracle Corporation. SwitchProof is not affiliated with Oracle.</p>
+  </section>
+</main>
+
+<footer class="doc-foot"><div class="doc-foot-in">
+  <span>SwitchProof is a product of <a href="https://trustroutetechnologies.com" rel="noopener">TrustRoute Technologies</a>, Burnaby, British Columbia, Canada · <a href="mailto:support@switchproof.online">support@switchproof.online</a></span>
+  <a href="features.html">Features</a><a href="help.html">Help</a><a href="formats.html">Formats</a><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="refunds.html">Refunds</a>
+</div></footer>
+</body>
+</html>
